@@ -3,7 +3,7 @@ from backend.core.database import get_db
 from backend.core.config import settings
 
 async def get_current_user(request: Request):
-    token = request.cookies.get("session_token")
+    token = request.cookies.get("__session")
     if not token:
         # Check header if cookie missing
         auth_header = request.headers.get("Authorization")

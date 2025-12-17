@@ -116,7 +116,7 @@ async def line_callback(request: Request, code: str, state: str, error: str = No
         
         # Redirect to Home with token (or set cookie)
         response = RedirectResponse(url='/') # Frontend handle
-        response.set_cookie(key="session_token", value=session_token, httponly=True)
+        response.set_cookie(key="__session", value=session_token, httponly=True)
         return response
 
 @router.post('/admin/login')
@@ -128,5 +128,5 @@ async def admin_login():
 @router.get('/logout')
 async def logout():
     response = RedirectResponse(url='/')
-    response.delete_cookie('session_token')
+    response.delete_cookie('__session')
     return response
