@@ -36,7 +36,7 @@ jobs:
             --region ${{ env.REGION }} \
             --project ${{ env.PROJECT_ID }} \
             --allow-unauthenticated \
-            --set-env-vars "LINE_CHANNEL_ID=${{ secrets.LINE_CHANNEL_ID }},LINE_CHANNEL_SECRET=${{ secrets.LINE_CHANNEL_SECRET }},SECRET_KEY=${{ secrets.SECRET_KEY }}"
+            --set-env-vars "LINE_CHANNEL_ID=${{ secrets.LINE_CHANNEL_ID }},LINE_CHANNEL_SECRET=${{ secrets.LINE_CHANNEL_SECRET }},SECRET_KEY=${{ secrets.SECRET_KEY }},FRONTEND_URL=https://${{ secrets.GCP_PROJECT_ID }}.web.app"
 
   # 2. Deploy Frontend to Firebase Hosting
   deploy-frontend:

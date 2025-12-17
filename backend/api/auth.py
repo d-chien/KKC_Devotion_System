@@ -23,20 +23,10 @@ async def line_login(request: Request):
     
     # In a real app, store state in cookie to verify later
     
-    redirect_uri = str(request.url_for('line_callback'))
-    
-    # Check if running on localhost for dev
-    if 'localhost' not in redirect_uri and '127.0.0.1' not in redirect_uri:
-        # Force HTTPS and use the Host header from the request (which should be the public domain)
-        # This handles the case where Cloud Run sees 'http' internally.
-        scheme = "https"
-        host = request.headers.get("host") # e.g., devotion-platform-8db8a.web.app
-        if host:
-             # Reconstruct URL to be safe: scheme://host/api/auth/line/callback
-             redirect_uri = f"{scheme}://{host}/api/auth/line/callback"
-        else:
-             # Fallback to simple replacement if host missing (unlikely)
-             redirect_uri = redirect_uri.replace('http://', 'https://')
+    # Use configured frontend URL as base to ensure consistency between
+    # what the user sees (Firebase) and what the backend constructs.
+    base_url = settings.FRONTEND_URL.rstrip('/')
+    redirect_uri = f"{base_url}/api/auth/line/callback"
 
     params = {
         'response_type': 'code',
@@ -49,6 +39,7 @@ async def line_login(request: Request):
     
     # Construct URL manually or via httpx
     url = httpx.URL(LINE_AUTH_URL, params=params)
+    print(url)
     return RedirectResponse(str(url))
 
 @router.get('/line/callback', name='line_callback')

@@ -12,6 +12,10 @@ class Settings(BaseSettings):
     SECRET_KEY: str = os.getenv("SECRET_KEY", "CHANGE_THIS_SECRET_KEY")
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 1 day
+    
+    # Frontend URL (For Callback construction)
+    # Default to localhost for dev, but CAN be overridden in Cloud Run env vars
+    FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:8000")
 
     # LINE
     LINE_CHANNEL_ID: str = os.getenv("LINE_CHANNEL_ID", "")
