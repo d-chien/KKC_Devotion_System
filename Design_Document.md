@@ -21,6 +21,12 @@
     - {DevotionId: {MemberId: string, MemberName: string, CategoryId: string, Amount: number, DevotionDate: Datetime}}
 - Categories (奉獻類別)
     - {CategoryId: {CategoryName: string, Type: string}}
+- AuditLogs (稽核日誌)
+    - {LogId: {OperatorType: "Admin"|"User", OperatorId: string, Action: string, TargetId: string, Details: map, Timestamp: Datetime}}
+    - *評估決策：考量專案規模與即時顯示需求，優先使用 Firestore 儲存日誌。BigQuery 做為未來長期分析之擴充選項。*
+- UserStats (使用者統計快取)
+    - {MemberId: {TotalAmount: number, TotalCount: number, LastDevotionDate: Datetime, LastUpdate: Datetime}}
+    - *用於優化首頁載入效能，避免每次登入都重新計算所有明細。*
 
 ## 使用者介面設計
 - 使用者介面：行動裝置優先設計
@@ -38,3 +44,6 @@
 - 沒有註冊登入的人員不可使用
 
 ## 未來增強功能
+- 大量資料上傳優化：引入 Pub/Sub 非同步處理機制，以支援萬筆以上級別的匯入。
+- 通知整合：串接 LINE Messaging API，於資料更新或綁定異動時推播通知。
+- 進階分析：將 AuditLogs 與奉獻資料同步至 BigQuery，進行長期趨勢分析與視覺化報表。
