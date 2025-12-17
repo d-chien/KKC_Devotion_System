@@ -182,11 +182,17 @@
                             </span>
                         </td>
                          <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                            <button class="text-indigo-600 hover:text-indigo-900">檢視</button>
+                            <button class="text-indigo-600 hover:text-indigo-900" onclick="viewUser('${u.LineId}')">檢視</button>
                         </td>
                     </tr>
                 `).join('');
             } catch (e) { console.error(e); }
+        }
+
+        function viewUser(lineId) {
+            // Basic implementation: Alert ID
+            // Future: Open modal or navigate to detail page
+            alert('查看使用者 Line ID: ' + lineId);
         }
 
         function adminLogout() {
