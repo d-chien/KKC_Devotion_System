@@ -20,6 +20,10 @@ class Settings(BaseSettings):
     # LINE
     LINE_CHANNEL_ID: str = os.getenv("LINE_CHANNEL_ID", "")
     LINE_CHANNEL_SECRET: str = os.getenv("LINE_CHANNEL_SECRET", "")
+    
+    # Simple Admin Auth
+    ADMIN_USERNAME: str = os.getenv("ADMIN_USERNAME", "admin")
+    ADMIN_PASSWORD: str = os.getenv("ADMIN_PASSWORD", "admin123")
     LINE_LIFF_ID: str = os.getenv("LINE_LIFF_ID", "")
 
     class Config:

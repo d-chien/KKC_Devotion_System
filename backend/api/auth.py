@@ -110,11 +110,27 @@ async def line_callback(request: Request, code: str, state: str, error: str = No
         response.set_cookie(key="__session", value=session_token, httponly=True)
         return response
 
+from backend.schemas import UserLogin # Ensure this schema exists or use Body
+from fastapi import Body
+
 @router.post('/admin/login')
-async def admin_login():
-    # Placeholder for admin login
-    # In real world, check username/password against DB
-    return {"message": "Admin Login Endpoint"}
+async def admin_login(username: str = Body(...), password: str = Body(...)):
+    if username == settings.ADMIN_USERNAME and password == settings.ADMIN_PASSWORD:
+        # Create Admin Session
+        session_token = str(uuid.uuid4())
+        db = get_db()
+        sessions_ref = db.collection('Sessions')
+        sessions_ref.document(session_token).set({
+            'LineId': 'ADMIN_USER', # Special ID for admin
+            'CreatedAt': datetime.now(),
+            'Role': 'Admin'
+        })
+        
+        response = RedirectResponse(url='/admin/dashboard.html', status_code=303)
+        response.set_cookie(key="__session", value=session_token, httponly=True)
+        return response
+    else:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
 
 @router.get('/logout')
 async def logout():

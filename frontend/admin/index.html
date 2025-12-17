@@ -44,12 +44,35 @@
     <script>
         document.getElementById('login-form').addEventListener('submit', async (e) => {
             e.preventDefault();
-            // In a real app, POST to /api/auth/admin/login
-            // For now, simple mock or just redirect to dashboard if endpoint doesn't really check
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const errorMsg = document.getElementById('error-msg');
 
-            // Simulating login:
-            localStorage.setItem('admin_token', 'mock_admin_token');
-            window.location.href = '/admin/dashboard.html';
+            try {
+                // Ensure we use the proper API URL (relative path works if hosted same domain, which they are)
+                const res = await fetch('/api/auth/admin/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+
+                if (res.ok) {
+                    // Successful login. The backend sets the session cookie.
+                    // If the backend returns a redirect, fetch might follow it, 
+                    // or we check res.url.
+                    // Given we returned a RedirectResponse with 303, fetch follows it automatically.
+                    // So res.url should be the dashboard url.
+                    window.location.href = '/admin/dashboard.html';
+                } else {
+                    const data = await res.json();
+                    errorMsg.textContent = data.detail || '登入失敗';
+                    errorMsg.classList.remove('hidden');
+                }
+            } catch (err) {
+                console.error(err);
+                errorMsg.textContent = '系統錯誤，請稍後再試';
+                errorMsg.classList.remove('hidden');
+            }
         });
     </script>
 </body>
