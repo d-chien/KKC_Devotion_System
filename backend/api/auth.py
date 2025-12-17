@@ -47,9 +47,9 @@ async def line_callback(request: Request, code: str, state: str, error: str = No
     if error:
         raise HTTPException(status_code=400, detail=error_description)
     
-    redirect_uri = str(request.url_for('line_callback'))
-    if 'https' not in redirect_uri and 'localhost' not in redirect_uri:
-         redirect_uri = redirect_uri.replace('http', 'https')
+    # Must match exactly the redirect_uri used in the login step
+    base_url = settings.FRONTEND_URL.rstrip('/')
+    redirect_uri = f"{base_url}/api/auth/line/callback"
 
     async with httpx.AsyncClient() as client:
         # Get Token
