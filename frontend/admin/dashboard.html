@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KKC 後台管理</title>
+    <link rel="icon" type="image/svg+xml" href="/media/favicon.svg">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-100 min-h-screen">
+    <header class="bg-white shadow">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
+            <div class="flex items-center">
+                <img src="/media/logo_bgrm.svg" alt="Logo" class="h-8 w-auto mr-3">
+                <h1 class="text-xl font-bold text-gray-900">KKC 後台管理系統</h1>
+            </div>
+            <div class="flex items-center space-x-4">
+                <span class="text-sm text-gray-500" id="current-time"></span>
+                <button onclick="adminLogout()" class="text-sm text-red-600 hover:text-red-800">登出</button>
+            </div>
+        </div>
+    </header>
+
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div class="flex flex-col md:flex-row gap-6">
+            <!-- Sidebar -->
+            <nav class="w-full md:w-64 flex-shrink-0 bg-white shadow rounded-lg p-4 h-fit">
+                <ul class="space-y-2">
+                    <li><button onclick="switchTab('dashboard')"
+                            class="w-full text-left px-3 py-2 rounded-md hover:bg-gray-50 text-indigo-600 font-medium bg-indigo-50 tab-btn"
+                            data-tab="dashboard">儀表板</button></li>
+                    <li><button onclick="switchTab('upload')"
+                            class="w-full text-left px-3 py-2 rounded-md hover:bg-gray-50 text-gray-700 tab-btn"
+                            data-tab="upload">資料上傳</button></li>
+                    <li><button onclick="switchTab('users')"
+                            class="w-full text-left px-3 py-2 rounded-md hover:bg-gray-50 text-gray-700 tab-btn"
+                            data-tab="users">使用者管理</button></li>
+                    <li><button onclick="switchTab('categories')"
+                            class="w-full text-left px-3 py-2 rounded-md hover:bg-gray-50 text-gray-700 tab-btn"
+                            data-tab="categories">奉獻類別管理</button></li>
+                </ul>
+            </nav>
+
+            <!-- Content -->
+            <main class="flex-1 bg-white shadow rounded-lg p-6 min-h-[500px]">
+
+                <!-- Tab: Dashboard -->
+                <div id="tab-dashboard" class="tab-content">
+                    <h2 class="text-2xl font-bold mb-6">全教會奉獻概況</h2>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                        <div class="bg-gray-50 p-4 rounded-lg">
+                            <div class="text-sm text-gray-500">總金額</div>
+                            <div class="text-2xl font-bold mt-1">NT$ 1,230,000</div>
+                        </div>
+                        <!-- More stats -->
+                    </div>
+                </div>
+
+                <!-- Tab: Upload -->
+                <div id="tab-upload" class="tab-content hidden">
+                    <h2 class="text-2xl font-bold mb-6">上傳奉獻資料</h2>
+                    <div class="border-2 border-dashed border-gray-300 rounded-lg p-12 text-center" id="drop-zone">
+                        <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none"
+                            viewBox="0 0 48 48" aria-hidden="true">
+                            <path
+                                d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
+                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                        </svg>
+                        <p class="mt-1 text-sm text-gray-600">
+                            拖放 Excel/CSV 檔案至此，或 <button class="font-medium text-indigo-600 hover:text-indigo-500"
+                                onclick="document.getElementById('file-upload').click()">瀏覽檔案</button>
+                        </p>
+                        <input id="file-upload" name="file-upload" type="file" class="sr-only" accept=".csv,.xlsx">
+                        <p class="mt-1 text-xs text-gray-500">支援 .xlsx, .csv 檔案</p>
+                    </div>
+                    <div id="file-info" class="mt-4 hidden items-center justify-between p-4 bg-gray-50 rounded-lg">
+                        <span id="file-name" class="font-medium">filename.csv</span>
+                        <button onclick="uploadFile()"
+                            class="px-4 py-2 bg-indigo-600 text-white rounded-md text-sm font-medium hover:bg-indigo-700">確認上傳</button>
+                    </div>
+                </div>
+
+                <!-- Tab: Users -->
+                <div id="tab-users" class="tab-content hidden">
+                    <h2 class="text-2xl font-bold mb-6">使用者管理</h2>
+                    <!-- Filters -->
+                    <div class="mb-4 flex gap-4">
+                        <input type="text" placeholder="搜尋姓名/編號" class="border rounded px-3 py-2 w-64">
+                    </div>
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead>
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">編號</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">姓名</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">狀態</th>
+                                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="user-list" class="bg-white divide-y divide-gray-200">
+                            <!-- JS fill -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Tab: Categories -->
+                <div id="tab-categories" class="tab-content hidden">
+                    <h2 class="text-2xl font-bold mb-6">類別管理</h2>
+                    <!-- Content -->
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <script>
+        // Tab Switching
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.getElementById(`tab-${tabId}`).classList.remove('hidden');
+
+            document.querySelectorAll('.tab-btn').forEach(el => {
+                el.classList.remove('bg-indigo-50', 'text-indigo-600', 'font-medium');
+                el.classList.add('text-gray-700');
+            });
+            const activeBtn = document.querySelector(`[data-tab="${tabId}"]`);
+            activeBtn.classList.remove('text-gray-700');
+            activeBtn.classList.add('bg-indigo-50', 'text-indigo-600', 'font-medium');
+
+            if (tabId === 'users') loadUsers();
+        }
+
+        // Upload Logic
+        const fileInput = document.getElementById('file-upload');
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                document.getElementById('file-info').classList.remove('hidden');
+                document.getElementById('file-info').classList.add('flex');
+                document.getElementById('file-name').textContent = e.target.files[0].name;
+            }
+        });
+
+        async function uploadFile() {
+            const file = fileInput.files[0];
+            if (!file) return;
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const res = await fetch('/api/admin/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await res.json();
+                alert(res.ok ? `上傳成功: ${data.processed} 筆` : `上傳失敗: ${data.detail}`);
+            } catch (e) {
+                alert("上傳錯誤");
+            }
+        }
+
+        // User List
+        async function loadUsers() {
+            try {
+                const res = await fetch('/api/admin/users');
+                const users = await res.json();
+                const tbody = document.getElementById('user-list');
+                tbody.innerHTML = users.map(u => `
+                    <tr>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${u.MemberId || '-'}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${u.MemberName || u.LineName || 'Unknown'}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm">
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${u.MemberId ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}">
+                                ${u.MemberId ? '已綁定' : '未綁定'}
+                            </span>
+                        </td>
+                         <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                            <button class="text-indigo-600 hover:text-indigo-900">檢視</button>
+                        </td>
+                    </tr>
+                `).join('');
+            } catch (e) { console.error(e); }
+        }
+
+        function adminLogout() {
+            localStorage.removeItem('admin_token');
+            window.location.href = '/admin/';
+        }
+
+        // Time
+        setInterval(() => {
+            document.getElementById('current-time').textContent = new Date().toLocaleString('zh-TW');
+        }, 1000);
+    </script>
+</body>
+
+</html>

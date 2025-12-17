@@ -1,1 +1,7 @@
 try_line_connect_page/
+.venv
+__pycache__/
+*.pyc
+.env
+.DS_Store
+serviceAccountKey.json
