@@ -1,66 +1,64 @@
-# Deployment Instructions
+# CI/CD Deployment Guide (GitHub Actions)
 
-This guide follows the **Google Cloud Run** deployment strategy. This service will host both the FastAPI backend and serve the static frontend files.
+This guide covers automating the deployment of:
+1.  **Backend** to **Google Cloud Run**.
+2.  **Frontend** to **Firebase Hosting**.
+
+## Architecture
+- **Frontend**: Static files served via Firebase Hosting (Global CDN).
+- **Backend**: FastAPI container running on Cloud Run.
+- **Routing**: Firebase Hosting is configured to proxy `/api/**` requests to the Cloud Run service, providing a unified domain name (no CORS issues).
 
 ## Prerequisites
+1.  **GitHub Repository**: Your code must be pushed to GitHub.
+2.  **Google Cloud Project**: With Billing enabled.
+3.  **Firebase Project**: Linked to your GCP Project.
 
-1.  **Google Cloud Platform Project**: Create one at [console.cloud.google.com](https://console.cloud.google.com/).
-2.  **Google Cloud SDK**: Install the `gcloud` CLI.
-3.  **Firebase Credentials**: Download your service account JSON key.
+## Step 1: Google Cloud & Firebase Setup
 
-## Steps
+1.  **Enable APIs** in [GCP Console](https://console.cloud.google.com/):
+    - Cloud Run Admin API
+    - Artifact Registry API
+    - IAM Credentials API
+    - Firebase Management API
 
-### 1. Prepare Environment Variables
-You need to set the environment variables in Cloud Run.
-Prepare the following values:
-- `LINE_CHANNEL_ID`: Your LINE Channel ID.
-- `LINE_CHANNEL_SECRET`: Your LINE Channel Secret.
-- `SECRET_KEY`: A random string for JWT security.
-- `FIREBASE_CREDENTIALS_PATH`: Path to the json file. **Note**: For Cloud Run, it's safer to use Google Secret Manager or store the JSON in the container (less secure).
-    - *Best Practice*: Allow the Cloud Run service account access to Firestore directly via IAM, so you don't need a JSON file key!
-    - *Code Adjustment*: The `backend/core/database.py` already supports default credentials (`firebase_admin.initialize_app()` without args) if the key file is missing.
+2.  **Create Service Account for GitHub Actions**:
+    - Go to **IAM & Admin** > **Service Accounts**.
+    - Create a new account (e.g., `github-actions-deploy`).
+    - Grant the following Roles:
+        - *Cloud Run Admin* (To deploy services)
+        - *Service Account User* (To act as the runtime service account)
+        - *Artifact Registry Admin* (To push container images)
+        - *Firebase Admin* (To deploy hosting)
+    - Create and download a **JSON Key** for this account.
 
-### 2. Build and Deploy with gcloud
+## Step 2: GitHub Repository Secrets
 
-Run the following command from the project root:
+Go to your GitHub Repo -> **Settings** -> **Secrets and variables** -> **Actions** -> **New repository secret**.
 
-```bash
-# 1. Login to Google Cloud
-gcloud auth login
+Add the following secrets (COPY values from your local `.env` file where applicable):
 
-# 2. Set your specific project ID
-gcloud config set project [YOUR_PROJECT_ID]
+| Secret Name | Value | Description |
+|---|---|---|
+| `GCP_CREDENTIALS` | (Content of your JSON Key file) | The Service Account JSON Key you downloaded. |
+| `GCP_PROJECT_ID` | `your-project-id` | Your Google Cloud Project ID. |
+| `LINE_CHANNEL_ID` | (Value from .env) | Your LINE Channel ID. |
+| `LINE_CHANNEL_SECRET` | (Value from .env) | Your LINE Channel Secret. |
+| `SECRET_KEY` | (Value from .env) | Your JWT Secret Key. |
 
-# 3. Deploy to Cloud Run (source based deployment)
-gcloud run deploy kkc-devotion-system \
-  --source . \
-  --platform managed \
-  --region asia-east1 \
-  --allow-unauthenticated \
-  --set-env-vars LINE_CHANNEL_ID=[YOUR_ID],LINE_CHANNEL_SECRET=[YOUR_SECRET],SECRET_KEY=[YOUR_KEY]
-```
+## Step 3: Create `firebase.json`
 
-### 3. Verify Deployment
+Create a file named `firebase.json` in the root directory to configure the hosting rules and API rewriting.
 
-1.  The command will output a service URL (e.g., `https://kkc-devotion-system-xyz-de.a.run.app`).
-2.  Open this URL in your browser.
-3.  Go to LINE Developers Console -> **LINE Login** settings.
-4.  Adding the Callback URL: `https://[YOUR_URL]/api/auth/line/callback`.
-
-### 4. Firestore Permissions
-
-Ensure the **Default Compute Service Account** used by Cloud Run has the "Cloud Datastore User" or "Firebase Admin" role in your GCP IAM settings.
-
----
-
-## Alternative: Firebase Hosting (Frontend) + Cloud Run (Backend)
-
-If you prefer using Firebase Hosting for the frontend:
-
-1.  Install firebase tools: `npm install -g firebase-tools`
-2.  Initialize: `firebase init hosting`
-3.  Edit `firebase.json` to rewrite API calls to Cloud Run:
-    ```json
+```json
+{
+  "hosting": {
+    "public": "frontend",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
     "rewrites": [
       {
         "source": "/api/**",
@@ -70,5 +68,76 @@ If you prefer using Firebase Hosting for the frontend:
         }
       }
     ]
-    ```
-4.  Deploy: `firebase deploy`
+  }
+}
+```
+
+## Step 4: Create GitHub Workflow
+
+Create a file at `.github/workflows/deploy.yml`:
+
+```yaml
+name: Deploy Production
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - 'README.md'
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  REGION: asia-east1
+  SERVICE_NAME: kkc-devotion-system
+
+jobs:
+  # 1. Deploy Backend to Cloud Run
+  deploy-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Google Auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: '${{ secrets.GCP_CREDENTIALS }}'
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy to Cloud Run
+        # This builds the source (Dockerfile) and deploys it
+        run: |
+          gcloud run deploy ${{ env.SERVICE_NAME }} \
+            --source . \
+            --region ${{ env.REGION }} \
+            --project ${{ env.PROJECT_ID }} \
+            --allow-unauthenticated \
+            --set-env-vars "LINE_CHANNEL_ID=${{ secrets.LINE_CHANNEL_ID }},LINE_CHANNEL_SECRET=${{ secrets.LINE_CHANNEL_SECRET }},SECRET_KEY=${{ secrets.SECRET_KEY }}"
+
+  # 2. Deploy Frontend to Firebase Hosting
+  deploy-frontend:
+    needs: deploy-backend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to Firebase Hosting
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: '${{ secrets.GITHUB_TOKEN }}'
+          firebaseServiceAccount: '${{ secrets.GCP_CREDENTIALS }}'
+          channelId: live
+          projectId: ${{ secrets.GCP_PROJECT_ID }}
+```
+
+## Step 5: Verification
+
+1.  Commit and Push the files (`firebase.json`, `.github/workflows/deploy.yml`) to GitHub.
+2.  Go to the **Actions** tab in GitHub to monitor the deployment.
+3.  Once green, open your Firebase Hosting URL (e.g., `https://[your-project-id].web.app`).
+4.  **Important**: Update your **LINE Login Callback URL** in the LINE Developers Console to:
+    `https://[your-project-id].web.app/api/auth/line/callback`
