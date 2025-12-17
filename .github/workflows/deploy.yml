@@ -10,7 +10,7 @@ on:
 env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
   REGION: asia-east1
-  SERVICE_NAME: kkc-devotion-system
+  SERVICE_NAME: devotion-system
 
 jobs:
   # 1. Deploy Backend to Cloud Run
