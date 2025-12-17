@@ -1,0 +1,55 @@
+name: Deploy Production
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - 'README.md'
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  REGION: asia-east1
+  SERVICE_NAME: kkc-devotion-system
+
+jobs:
+  # 1. Deploy Backend to Cloud Run
+  deploy-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Google Auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: '${{ secrets.GCP_CREDENTIALS }}'
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy to Cloud Run
+        # This builds the source (Dockerfile) and deploys it
+        run: |
+          gcloud run deploy ${{ env.SERVICE_NAME }} \
+            --source . \
+            --region ${{ env.REGION }} \
+            --project ${{ env.PROJECT_ID }} \
+            --allow-unauthenticated \
+            --set-env-vars "LINE_CHANNEL_ID=${{ secrets.LINE_CHANNEL_ID }},LINE_CHANNEL_SECRET=${{ secrets.LINE_CHANNEL_SECRET }},SECRET_KEY=${{ secrets.SECRET_KEY }}"
+
+  # 2. Deploy Frontend to Firebase Hosting
+  deploy-frontend:
+    needs: deploy-backend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to Firebase Hosting
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: '${{ secrets.GITHUB_TOKEN }}'
+          firebaseServiceAccount: '${{ secrets.GCP_CREDENTIALS }}'
+          channelId: live
+          projectId: ${{ secrets.GCP_PROJECT_ID }}

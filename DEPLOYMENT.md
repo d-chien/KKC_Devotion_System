@@ -63,7 +63,7 @@ Create a file named `firebase.json` in the root directory to configure the hosti
       {
         "source": "/api/**",
         "run": {
-          "serviceId": "kkc-devotion-system",
+          "serviceId": "devotion-system",
           "region": "asia-east1"
         }
       }
