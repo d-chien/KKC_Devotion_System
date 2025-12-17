@@ -24,10 +24,20 @@ async def line_login(request: Request):
     # In a real app, store state in cookie to verify later
     
     redirect_uri = str(request.url_for('line_callback'))
-    # Ensure HTTPS if deployed or tweak for local
-    if 'https' not in redirect_uri and 'localhost' not in redirect_uri:
-         redirect_uri = redirect_uri.replace('http', 'https')
-         
+    
+    # Check if running on localhost for dev
+    if 'localhost' not in redirect_uri and '127.0.0.1' not in redirect_uri:
+        # Force HTTPS and use the Host header from the request (which should be the public domain)
+        # This handles the case where Cloud Run sees 'http' internally.
+        scheme = "https"
+        host = request.headers.get("host") # e.g., devotion-platform-8db8a.web.app
+        if host:
+             # Reconstruct URL to be safe: scheme://host/api/auth/line/callback
+             redirect_uri = f"{scheme}://{host}/api/auth/line/callback"
+        else:
+             # Fallback to simple replacement if host missing (unlikely)
+             redirect_uri = redirect_uri.replace('http://', 'https://')
+
     params = {
         'response_type': 'code',
         'client_id': settings.LINE_CHANNEL_ID,
