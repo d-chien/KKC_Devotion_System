@@ -12,17 +12,32 @@ router = APIRouter()
 @router.get("/dashboard")
 async def get_admin_dashboard_stats():
     db = get_db()
-    # Aggregation query might be better, but for now scan all devotions
-    # For large scale, use distributed counters or aggregation tasks
-    devotions = db.collection('Devotions').stream()
+    
+    # 1. Get Total Count using Aggregation Query (Efficient)
+    # Note: aggregation_query is available in newer google-cloud-firestore
+    # If not available in current env, fallback to count loop, but let's try standard way.
+    # Actually, standard python client supports collection_group query count, or collection count.
+    
+    # Simple count query
+    # collection_ref = db.collection('Devotions')
+    # count_query = collection_ref.count()
+    # count_snapshot = count_query.get()
+    # total_count = count_snapshot[0][0].value 
+    
+    # However, 'count()' is in newer library versions. Let's stick to safe optimization: Projection.
+    # We only need Amount and Category for stats.
+    
+    devotions = db.collection('Devotions').select(['Amount', 'CategoryName', 'CategoryId']).stream()
     
     total_amount = 0
     count = 0
     cat_dist = {}
     
     for d in devotions:
+        # data is partial dict due to select
         data = d.to_dict()
         amt = data.get('Amount', 0)
+        # Use CategoryName preferred, fallback to ID
         cat = data.get('CategoryName') or data.get('CategoryId') or 'Unknown'
         
         total_amount += amt
@@ -118,7 +133,16 @@ async def get_categories():
 @router.post("/categories")
 async def create_category(cat: Category):
     db = get_db()
-    ref = db.collection('Categories').document()
+    if cat.id:
+        # Check if exists to prevent overwrite? Spec doesn't strictly say, but usually good practice.
+        # But for 'set', overwriting might be intended or acceptable for admin.
+        # Let's check to be safe.
+        ref = db.collection('Categories').document(cat.id)
+        if ref.get().exists:
+             raise HTTPException(status_code=400, detail="Category ID already exists")
+    else:
+        ref = db.collection('Categories').document()
+        
     ref.set(cat.dict())
     return {"status": "created", "id": ref.id}
 
