@@ -232,23 +232,22 @@ async def update_member(member_id: str, update_data: UserUpdate):
                 'BindDate': None
             })
     else:
-        # Update Member details (e.g. name fix)
-        # Note: If admin changes member name here, should we propagate to User?
-        # For now, let's just update Member doc.
+        # Update Member details
         updates = {}
         if update_data.member_name:
-             # In Schema we use 'member_name', here we map to whatever DB field is
-             # Assuming DB uses 'Name' or similar? 
-             # Wait, in upload we don't create Members. Members are created separate?
-             # Or implied?
-             # Let's assume Members collection has 'Name' field based on generic usage.
-             # Actually upload has 'MemberName'.
-             # Let's stick to update_data's fields.
-             pass
-             # Actually, without a schema for Member update, this is tricky.
-             # Let's assume we just want to Unbind for now as that's the main "Manage" feature.
-             pass
-             
+             updates['Name'] = update_data.member_name
+             # Start Sync: Also update MemberName in Devotions? Too expensive for MVP.
+             # But should update MemberName in bound Users if any.
+        
+        if updates:
+            member_ref.update(updates)
+            
+            # Sync to User if bound and Name changed
+            if 'Name' in updates and doc.to_dict().get('isBind'):
+                 users = db.collection('Users').where('MemberId', '==', member_id).stream()
+                 for u in users:
+                     u.reference.update({'MemberName': updates['Name']})
+
     return {"status": "success"}
 
 # Additional admin mgmt endpoints here...
