@@ -528,6 +528,11 @@
         setInterval(() => {
             document.getElementById('current-time').textContent = new Date().toLocaleString('zh-TW');
         }, 1000);
+
+        // Init
+        document.addEventListener('DOMContentLoaded', () => {
+            switchTab('dashboard');
+        });
     </script>
 </body>
 
