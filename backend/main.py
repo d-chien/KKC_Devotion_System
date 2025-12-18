@@ -8,9 +8,16 @@ import os
 app = FastAPI(title=settings.PROJECT_NAME, openapi_url=f"{settings.API_V1_STR}/openapi.json")
 
 # CORS
+origins = [
+    settings.FRONTEND_URL,
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+    "http://localhost:3000", # Common frontend dev port
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # Tweak for prod
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -11,23 +11,23 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 async function checkAuth() {
     try {
-        const res = await fetch(`${API_BASE}/user/me`);
+        const res = await fetch(`${API_BASE}/user/me`, { credentials: 'include' });
         if (res.status === 401 || res.status === 403) {
             showLogin();
             return;
         }
-        
+
         if (!res.ok) throw new Error("Failed to fetch user");
-        
+
         userData = await res.json();
-        
+
         if (!userData.IsBound) {
             showBindModal();
         } else {
             showDashboard();
             loadDashboard();
         }
-        
+
     } catch (e) {
         console.error(e);
         showLogin();
@@ -42,7 +42,7 @@ function showLogin() {
 function showDashboard() {
     document.getElementById('login-view').classList.add('hidden');
     document.getElementById('dashboard-view').classList.remove('hidden');
-    
+
     document.getElementById('user-name').textContent = userData.LineName || userData.MemberName;
     document.getElementById('user-id').textContent = `ID: ${userData.MemberId}`;
 }
@@ -58,34 +58,35 @@ function showBindModal() {
 async function submitBind() {
     const name = document.getElementById('bind-name').value;
     const id = document.getElementById('bind-id').value;
-    
+
     if (!name || !id) {
         alert("請輸入完整資訊");
         return;
     }
-    
+
     try {
         const res = await fetch(`${API_BASE}/user/bind`, {
             method: 'POST',
-            headers: {'Content-Type': 'application/json'},
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
             body: JSON.stringify({
                 member_id: id,
                 member_name: name,
                 line_id: userData.LineId, // Redundant but per schema
                 line_name: userData.LineName || name
-             })
+            })
         });
-        
+
         if (!res.ok) {
             const err = await res.json();
             alert(err.detail || "綁定失敗");
             return;
         }
-        
+
         document.getElementById('bind-modal').classList.add('hidden');
         // Reload or update state
-        location.reload(); 
-        
+        location.reload();
+
     } catch (e) {
         alert("綁定發生錯誤");
     }
@@ -93,9 +94,9 @@ async function submitBind() {
 
 async function loadDashboard() {
     try {
-        const res = await fetch(`${API_BASE}/user/dashboard`);
+        const res = await fetch(`${API_BASE}/user/dashboard`, { credentials: 'include' });
         if (!res.ok) throw new Error("Failed to load dashboard");
-        
+
         dashboardData = await res.json();
         renderDashboard();
     } catch (e) {
@@ -108,9 +109,9 @@ function renderDashboard() {
     const amtEl = document.getElementById('total-amount');
     amtEl.dataset.value = dashboardData.total_amount.toLocaleString();
     amtEl.textContent = showAmount ? amtEl.dataset.value : '****';
-    
+
     document.getElementById('total-count').textContent = dashboardData.total_count;
-    
+
     // List
     const listEl = document.getElementById('devotion-list');
     listEl.innerHTML = dashboardData.recent_devotions.map(d => `
@@ -120,7 +121,7 @@ function renderDashboard() {
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-right">${d.Amount.toLocaleString()}</td>
         </tr>
     `).join('');
-    
+
     // Charts
     renderCharts();
 }
@@ -138,7 +139,7 @@ function renderCharts() {
     const ctxDonut = document.getElementById('categoryChart').getContext('2d');
     const catLabels = Object.keys(dashboardData.category_distribution);
     const catValues = Object.values(dashboardData.category_distribution);
-    
+
     new Chart(ctxDonut, {
         type: 'doughnut',
         data: {
@@ -154,7 +155,7 @@ function renderCharts() {
             plugins: {
                 tooltip: {
                     callbacks: {
-                        label: function(context) {
+                        label: function (context) {
                             let label = context.label || '';
                             if (label) {
                                 label += ': ';
@@ -170,22 +171,22 @@ function renderCharts() {
             }
         }
     });
-    
+
     // Stacked Bar (Simplified to single bar for history or group by month?)
     // Spec says: "Stacked Bar ... by category ... by date"
     // For MVP, lets just do bar chart of amounts by date
     // Or simpler history.
     // Assuming 'recent_devotions' has date.
-    
+
     // Group by Date
     const dateMap = {};
     dashboardData.recent_devotions.forEach(d => {
         const date = new Date(d.DevotionDate).toLocaleDateString();
         dateMap[date] = (dateMap[date] || 0) + d.Amount;
     });
-    
+
     const sortedDates = Object.keys(dateMap).sort(); // Basic sort
-    
+
     const ctxBar = document.getElementById('historyChart').getContext('2d');
     new Chart(ctxBar, {
         type: 'bar',

@@ -228,7 +228,7 @@
                 // We need an endpoint for admin dashboard stats.
                 // Assuming /api/admin/dashboard or similar. 
                 // Let's create it in backend first or assume it returns AdminDashboardData
-                const res = await fetch('/api/admin/dashboard');
+                const res = await fetch('/api/admin/dashboard', { credentials: 'include' });
                 if (!res.ok) throw new Error("Failed to load dashboard");
                 const data = await res.json();
 
@@ -272,7 +272,7 @@
         async function loadCategories() {
             const container = document.getElementById('tab-categories');
             try {
-                const res = await fetch('/api/admin/categories');
+                const res = await fetch('/api/admin/categories', { credentials: 'include' });
                 const cats = await res.json();
 
                 container.innerHTML = `
@@ -332,6 +332,7 @@
                 const res = await fetch('/api/admin/categories', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
                     body: JSON.stringify(payload)
                 });
 
@@ -348,7 +349,7 @@
         async function deleteCategory(id) {
             if (!confirm('確定刪除?')) return;
             try {
-                const res = await fetch(`/api/admin/categories/${id}`, { method: 'DELETE' });
+                const res = await fetch(`/api/admin/categories/${id}`, { method: 'DELETE', credentials: 'include' });
                 if (res.ok) {
                     loadCategories();
                 } else {
@@ -377,6 +378,7 @@
             try {
                 const res = await fetch('/api/admin/upload', {
                     method: 'POST',
+                    credentials: 'include',
                     body: formData
                 });
                 const data = await res.json();
@@ -391,7 +393,7 @@
 
         async function loadUsers() {
             try {
-                const res = await fetch('/api/admin/members');
+                const res = await fetch('/api/admin/members', { credentials: 'include' });
                 allMembers = await res.json();
 
                 // Sort by ID
@@ -440,7 +442,7 @@
         async function viewUser(memberId) {
             currentMemberId = memberId;
             try {
-                const res = await fetch(`/api/admin/members/${memberId}`);
+                const res = await fetch(`/api/admin/members/${memberId}`, { credentials: 'include' });
                 if (!res.ok) throw new Error("Fetch failed");
                 const data = await res.json();
 
@@ -478,6 +480,7 @@
                 const res = await fetch(`/api/admin/members/${currentMemberId}`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
                     body: JSON.stringify({
                         member_name: memberName,
                         is_unbind: false
@@ -505,6 +508,7 @@
                 const res = await fetch(`/api/admin/members/${currentMemberId}`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
                     body: JSON.stringify({
                         is_unbind: true
                     })

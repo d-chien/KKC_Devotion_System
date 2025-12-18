@@ -106,8 +106,20 @@ async def line_callback(request: Request, code: str, state: str, error: str = No
         })
         
         # Redirect to Home with token (or set cookie)
-        response = RedirectResponse(url='/') # Frontend handle
-        response.set_cookie(key="__session", value=session_token, httponly=True)
+        # Using 303 See Other is better for redirections after logic
+        response = RedirectResponse(url=settings.FRONTEND_URL, status_code=303)
+        
+        # Determine if we should set Secure flag (True if on HTTPS)
+        is_secure = settings.FRONTEND_URL.startswith("https")
+        
+        response.set_cookie(
+            key="__session",
+            value=session_token,
+            httponly=True,
+            secure=is_secure,
+            samesite="lax",
+            path="/"
+        )
         return response
 
 from backend.schemas import UserLogin # Ensure this schema exists or use Body
