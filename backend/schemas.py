@@ -34,6 +34,11 @@ class UserBind(BaseModel):
     line_id: str
     line_name: str
 
+class UserUpdate(BaseModel):
+    member_id: Optional[str] = None
+    member_name: Optional[str] = None
+    is_unbind: bool = False # If true, clear binding
+
 class Devotion(BaseModel):
     id: Optional[str] = None
     member_id: str

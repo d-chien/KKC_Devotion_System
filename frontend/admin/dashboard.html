@@ -120,6 +120,46 @@
         </div>
     </div>
 
+    <!-- User Edit Modal -->
+    <div id="user-modal"
+        class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden overflow-y-auto h-full w-full flex items-center justify-center">
+        <div class="relative bg-white rounded-lg shadow-xl p-8 m-4 max-w-xl w-full">
+            <h3 class="text-xl font-semibold mb-4 text-gray-900">編輯使用者</h3>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Line 名稱</label>
+                    <input type="text" id="modal-line-name"
+                        class="mt-1 w-full bg-gray-100 border border-gray-300 rounded px-3 py-2" readonly>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Line ID</label>
+                    <input type="text" id="modal-line-id"
+                        class="mt-1 w-full bg-gray-100 border border-gray-300 rounded px-3 py-2" readonly>
+                </div>
+                <hr>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">綁定會員名稱</label>
+                    <input type="text" id="modal-member-name"
+                        class="mt-1 w-full border border-gray-300 rounded px-3 py-2">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">綁定會員編號</label>
+                    <input type="text" id="modal-member-id"
+                        class="mt-1 w-full border border-gray-300 rounded px-3 py-2">
+                </div>
+            </div>
+            <div class="mt-6 flex justify-end space-x-3">
+                <button onclick="unbindUser()"
+                    class="px-4 py-2 bg-red-100 text-red-700 rounded hover:bg-red-200">解除綁定</button>
+                <div class="flex-1"></div>
+                <button onclick="closeModal()"
+                    class="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300">取消</button>
+                <button onclick="saveUser()"
+                    class="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700">儲存</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         // Tab Switching
         function switchTab(tabId) {
@@ -175,24 +215,91 @@
                 tbody.innerHTML = users.map(u => `
                     <tr>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${u.MemberId || '-'}</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${u.MemberName || u.LineName || 'Unknown'}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${u.LineName || u.LineName || 'Unknown'}</td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm">
                             <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${u.MemberId ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}">
                                 ${u.MemberId ? '已綁定' : '未綁定'}
                             </span>
                         </td>
                          <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                            <button class="text-indigo-600 hover:text-indigo-900" onclick="viewUser('${u.LineId}')">檢視</button>
+                            <button class="text-indigo-600 hover:text-indigo-900" onclick="viewUser('${u.LineId}')">編輯</button>
                         </td>
                     </tr>
                 `).join('');
             } catch (e) { console.error(e); }
         }
 
-        function viewUser(lineId) {
-            // Basic implementation: Alert ID
-            // Future: Open modal or navigate to detail page
-            alert('查看使用者 Line ID: ' + lineId);
+        let currentUserId = null;
+
+        async function viewUser(lineId) {
+            currentUserId = lineId;
+            try {
+                const res = await fetch(`/api/admin/users/${lineId}`);
+                if (!res.ok) throw new Error("Fetch failed");
+                const user = await res.json();
+
+                document.getElementById('modal-line-name').value = user.LineName || '';
+                document.getElementById('modal-line-id').value = user.LineId || '';
+                document.getElementById('modal-member-name').value = user.MemberName || '';
+                document.getElementById('modal-member-id').value = user.MemberId || '';
+
+                document.getElementById('user-modal').classList.remove('hidden');
+            } catch (e) {
+                alert('無法讀取使用者資料');
+                console.error(e);
+            }
+        }
+
+        function closeModal() {
+            document.getElementById('user-modal').classList.add('hidden');
+            currentUserId = null;
+        }
+
+        async function saveUser() {
+            if (!currentUserId) return;
+            const memberName = document.getElementById('modal-member-name').value;
+            const memberId = document.getElementById('modal-member-id').value;
+
+            try {
+                const res = await fetch(`/api/admin/users/${currentUserId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        member_name: memberName,
+                        member_id: memberId,
+                        is_unbind: false
+                    })
+                });
+                if (res.ok) {
+                    alert('更新成功');
+                    closeModal();
+                    loadUsers();
+                } else {
+                    alert('更新失敗');
+                }
+            } catch (e) { console.error(e); alert('Error'); }
+        }
+
+        async function unbindUser() {
+            if (!currentUserId) return;
+            if (!confirm('確定要解除綁定嗎？')) return;
+
+            try {
+                const res = await fetch(`/api/admin/users/${currentUserId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        is_unbind: true
+                    })
+                });
+                if (res.ok) {
+                    alert('已解除綁定');
+                    closeModal();
+                    loadUsers();
+                } else {
+                    alert('操作失敗');
+                }
+            } catch (e) { console.error(e); alert('Error'); }
         }
 
         function adminLogout() {
