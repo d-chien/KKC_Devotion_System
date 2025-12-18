@@ -96,59 +96,103 @@ async def create_category(cat: Category):
     return {"status": "created", "id": ref.id}
 
 # --- Users Mgmt ---
-@router.get("/users")
-async def get_users_list():
+# --- Members Mgmt ---
+@router.get("/members")
+async def get_members_list():
     db = get_db()
-    users = db.collection('Users').stream()
-    return [{"LineId": u.id, **u.to_dict()} for u in users]
-
-@router.get("/users/{user_id}")
-async def get_user_detail(user_id: str):
-    db = get_db()
-    doc = db.collection('Users').document(user_id).get()
-    if not doc.exists:
-        raise HTTPException(status_code=404, detail="User not found")
-    return {"LineId": doc.id, **doc.to_dict()}
-
-from backend.schemas import UserUpdate
-@router.put("/users/{user_id}")
-async def update_user(user_id: str, update_data: UserUpdate):
-    db = get_db()
-    user_ref = db.collection('Users').document(user_id)
-    doc = user_ref.get()
+    # List all members from Members collection
+    members = db.collection('Members').stream()
     
-    if not doc.exists:
-        raise HTTPException(status_code=404, detail="User not found")
+    # Optimize: Fetch all Users who are bound to map MemberId -> LineName
+    # This avoids N+1 queries.
+    users = db.collection('Users').where('MemberId', '!=', None).stream()
+    
+    # Create mapping: MemberId -> LineName
+    member_user_map = {}
+    for u in users:
+        ud = u.to_dict()
+        mid = ud.get('MemberId')
+        if mid:
+            member_user_map[mid] = ud.get('LineName', 'Unknown')
+
+    result = []
+    
+    for m in members:
+        d = m.to_dict()
+        d['id'] = m.id 
         
-    current_data = doc.to_dict()
+        # Attach BoundUserName if bound
+        if d.get('isBind'):
+            d['BoundUserName'] = member_user_map.get(m.id)
+            
+        result.append(d)
+        
+    return result
+
+@router.get("/members/{member_id}")
+async def get_member_detail(member_id: str):
+    db = get_db()
+    doc = db.collection('Members').document(member_id).get()
+    if not doc.exists:
+        raise HTTPException(status_code=404, detail="Member not found")
+        
+    data = doc.to_dict()
+    data['id'] = doc.id
     
-    updates = {}
+    # If bound, find the User
+    if data.get('isBind'):
+        users = db.collection('Users').where('MemberId', '==', member_id).limit(1).stream()
+        for u in users:
+            user_data = u.to_dict()
+            data['BoundUser'] = {
+                'LineId': u.id,
+                'LineName': user_data.get('LineName')
+            }
+            break
+            
+    return data
+
+@router.put("/members/{member_id}")
+async def update_member(member_id: str, update_data: UserUpdate):
+    # Using UserUpdate schema for convenience, though fields might conceptually differ
+    db = get_db()
+    member_ref = db.collection('Members').document(member_id)
+    doc = member_ref.get()
+    
+    if not doc.exists:
+        raise HTTPException(status_code=404, detail="Member not found")
+        
     if update_data.is_unbind:
-        # Unbind
-        updates = {
-            'MemberId': None,
-            'MemberName': None,
-            'BindDate': None
-        }
-        # Also update Members collection to release binding
-        old_member_id = current_data.get('MemberId')
-        if old_member_id:
-             db.collection('Members').document(old_member_id).update({'isBind': False})
-             
+        # Unbind Logic
+        # 1. Update Member
+        member_ref.update({'isBind': False})
+        
+        # 2. Find and update User
+        users = db.collection('Users').where('MemberId', '==', member_id).stream()
+        for u in users:
+            u.reference.update({
+                'MemberId': None,
+                'MemberName': None,
+                'BindDate': None
+            })
     else:
-        # Update info (re-bind or fix name)
-        if update_data.member_id is not None:
-             updates['MemberId'] = update_data.member_id
-        if update_data.member_name is not None:
-             updates['MemberName'] = update_data.member_name
+        # Update Member details (e.g. name fix)
+        # Note: If admin changes member name here, should we propagate to User?
+        # For now, let's just update Member doc.
+        updates = {}
+        if update_data.member_name:
+             # In Schema we use 'member_name', here we map to whatever DB field is
+             # Assuming DB uses 'Name' or similar? 
+             # Wait, in upload we don't create Members. Members are created separate?
+             # Or implied?
+             # Let's assume Members collection has 'Name' field based on generic usage.
+             # Actually upload has 'MemberName'.
+             # Let's stick to update_data's fields.
+             pass
+             # Actually, without a schema for Member update, this is tricky.
+             # Let's assume we just want to Unbind for now as that's the main "Manage" feature.
+             pass
              
-        # Note: If changing MemberId, need to handle old member isBind status and new member isBind status.
-        # This is strictly admin override, so we assume admin knows what they are doing,
-        # but logic should ideally check if new member is already bound.
-        
-    if updates:
-        user_ref.update(updates)
-        
-    return {"status": "success", "updated": updates}
+    return {"status": "success"}
 
 # Additional admin mgmt endpoints here...

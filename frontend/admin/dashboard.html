@@ -91,7 +91,7 @@
 
                 <!-- Tab: Users -->
                 <div id="tab-users" class="tab-content hidden">
-                    <h2 class="text-2xl font-bold mb-6">使用者管理</h2>
+                    <h2 class="text-2xl font-bold mb-6">會友管理</h2>
                     <!-- Filters -->
                     <div class="mb-4 flex gap-4">
                         <input type="text" placeholder="搜尋姓名/編號" class="border rounded px-3 py-2 w-64">
@@ -99,9 +99,9 @@
                     <table class="min-w-full divide-y divide-gray-200">
                         <thead>
                             <tr>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">編號</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">姓名</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">狀態</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">會友編號</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">會友姓名</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">綁定狀態</th>
                                 <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">操作</th>
                             </tr>
                         </thead>
@@ -131,11 +131,7 @@
                     <input type="text" id="modal-line-name"
                         class="mt-1 w-full bg-gray-100 border border-gray-300 rounded px-3 py-2" readonly>
                 </div>
-                <div>
-                    <label class="block text-sm font-medium text-gray-700">Line ID</label>
-                    <input type="text" id="modal-line-id"
-                        class="mt-1 w-full bg-gray-100 border border-gray-300 rounded px-3 py-2" readonly>
-                </div>
+                <!-- Line ID hidden as per request -->
                 <hr>
                 <div>
                     <label class="block text-sm font-medium text-gray-700">綁定會員名稱</label>
@@ -206,86 +202,97 @@
             }
         }
 
-        // User List
+        // Member List (Was User List)
         async function loadUsers() {
             try {
-                const res = await fetch('/api/admin/users');
-                const users = await res.json();
+                const res = await fetch('/api/admin/members');
+                const members = await res.json();
                 const tbody = document.getElementById('user-list');
-                tbody.innerHTML = users.map(u => `
+
+                // Sort by ID or Name
+                members.sort((a, b) => (a.id || '').localeCompare(b.id || ''));
+
+                tbody.innerHTML = members.map(m => `
                     <tr>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${u.MemberId || '-'}</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${u.LineName || u.LineName || 'Unknown'}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${m.id}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${m.Name || m.MemberName || '-'}</td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm">
-                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${u.MemberId ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}">
-                                ${u.MemberId ? '已綁定' : '未綁定'}
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${m.isBind ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}">
+                                ${m.isBind ? '已綁定' : '未綁定'}
                             </span>
                         </td>
                          <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                            <button class="text-indigo-600 hover:text-indigo-900" onclick="viewUser('${u.LineId}')">編輯</button>
+                            <button class="text-indigo-600 hover:text-indigo-900" onclick="viewUser('${m.id}')">管理</button>
                         </td>
                     </tr>
                 `).join('');
             } catch (e) { console.error(e); }
         }
 
-        let currentUserId = null;
+        let currentMemberId = null;
 
-        async function viewUser(lineId) {
-            currentUserId = lineId;
+        async function viewUser(memberId) {
+            currentMemberId = memberId;
             try {
-                const res = await fetch(`/api/admin/users/${lineId}`);
+                const res = await fetch(`/api/admin/members/${memberId}`);
                 if (!res.ok) throw new Error("Fetch failed");
-                const user = await res.json();
+                const data = await res.json();
 
-                document.getElementById('modal-line-name').value = user.LineName || '';
-                document.getElementById('modal-line-id').value = user.LineId || '';
-                document.getElementById('modal-member-name').value = user.MemberName || '';
-                document.getElementById('modal-member-id').value = user.MemberId || '';
+                // Modal Fields
+                // Left side: Member Info
+                document.getElementById('modal-member-id').value = data.id || '';
+                document.getElementById('modal-member-name').value = data.Name || data.MemberName || '';
+
+                // Right side: Bound User Info (if any)
+                if (data.BoundUser) {
+                    document.getElementById('modal-line-name').value = data.BoundUser.LineName || '';
+                    document.getElementById('modal-line-id').value = data.BoundUser.LineId || '';
+                } else {
+                    document.getElementById('modal-line-name').value = '未綁定';
+                    document.getElementById('modal-line-id').value = '-';
+                }
 
                 document.getElementById('user-modal').classList.remove('hidden');
             } catch (e) {
-                alert('無法讀取使用者資料');
+                alert('無法讀取會友資料');
                 console.error(e);
             }
         }
 
         function closeModal() {
             document.getElementById('user-modal').classList.add('hidden');
-            currentUserId = null;
+            currentMemberId = null;
         }
 
         async function saveUser() {
-            if (!currentUserId) return;
+            // Currently only Unbind is supported properly on backend, 
+            // Name update is placeholder.
+            alert('目前僅支援解除綁定功能');
+            closeModal();
+            /*
+            if(!currentMemberId) return;
             const memberName = document.getElementById('modal-member-name').value;
-            const memberId = document.getElementById('modal-member-id').value;
-
+            
             try {
-                const res = await fetch(`/api/admin/users/${currentUserId}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        member_name: memberName,
-                        member_id: memberId,
-                        is_unbind: false
-                    })
-                });
-                if (res.ok) {
-                    alert('更新成功');
-                    closeModal();
-                    loadUsers();
-                } else {
-                    alert('更新失敗');
-                }
-            } catch (e) { console.error(e); alert('Error'); }
+                 const res = await fetch(`/api/admin/members/${currentMemberId}`, {
+                     method: 'PUT',
+                     headers: { 'Content-Type': 'application/json' },
+                     body: JSON.stringify({
+                         member_name: memberName,
+                         is_unbind: false
+                     })
+                 });
+                 // ...
+            } catch(e) { ... }
+            */
         }
 
         async function unbindUser() {
-            if (!currentUserId) return;
-            if (!confirm('確定要解除綁定嗎？')) return;
+            if (!currentMemberId) return;
+            if (!confirm('確定要解除此會友的 LINE 綁定嗎？\n(這將會切斷與 LINE 使用者的連結)')) return;
 
             try {
-                const res = await fetch(`/api/admin/users/${currentUserId}`, {
+                const res = await fetch(`/api/admin/members/${currentMemberId}`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
