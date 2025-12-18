@@ -27,7 +27,8 @@ async def get_current_user(request: Request):
     user = user_ref.get()
     
     if not user.exists:
-        raise HTTPException(status_code=404, detail="User not found")
+        print(f"DEBUG: User not found in 'Users' collection for LineId: {line_id}")
+        raise HTTPException(status_code=404, detail=f"User {line_id} not found")
         
     user_data = user.to_dict()
     user_data['LineId'] = line_id # Inject ID

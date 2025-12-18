@@ -23,25 +23,18 @@ def get_db():
                 firebase_admin.initialize_app()
         
         try:
-            # Explicitly use google-cloud-firestore client to ensure database selection works
-            from google.cloud import firestore as google_firestore
+            # Use environment variable for database name if provided, else default to (default)
+            db_name = os.getenv("FIRESTORE_DATABASE", "(default)")
             
-            # Get project ID from environment or settings
-            project_id = os.getenv('GOOGLE_CLOUD_PROJECT', os.getenv('GCP_PROJECT_ID'))
+            if db_name == "(default)":
+                db = firestore.client()
+            else:
+                from google.cloud import firestore as google_firestore
+                project_id = os.getenv('GOOGLE_CLOUD_PROJECT', os.getenv('GCP_PROJECT_ID'))
+                db = google_firestore.Client(project=project_id, database=db_name)
             
-            if not project_id and settings.FIREBASE_CREDENTIALS_PATH and os.path.exists(settings.FIREBASE_CREDENTIALS_PATH):
-                 # derive from credentials if not in env
-                 pass 
-
-            # Initialize Client directly
-            # This is more robust for named databases than firebase_admin wrapper in some versions
-            db = google_firestore.Client(
-                project=project_id,
-                database='devotion-system'
-            )
-            print(f"Successfully connected to Firestore DB: devotion-system in project {project_id}")
+            print(f"Successfully connected to Firestore DB: {db_name}")
         except Exception as e:
-            print(f"Failed to connect to named DB, falling back to default. Error: {e}")
-            # Fallback
+            print(f"Failed to connect to Firestore. Error: {e}")
             db = firestore.client()
     return db
