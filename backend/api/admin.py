@@ -4,7 +4,7 @@ from backend.core.database import get_db
 import pandas as pd
 import io
 from datetime import datetime
-from backend.schemas import Category
+from backend.schemas import Category, UserUpdate
 
 router = APIRouter()
 
