@@ -8,6 +8,33 @@ from backend.schemas import Category, UserUpdate
 
 router = APIRouter()
 
+# --- Dashboard Stats ---
+@router.get("/dashboard")
+async def get_admin_dashboard_stats():
+    db = get_db()
+    # Aggregation query might be better, but for now scan all devotions
+    # For large scale, use distributed counters or aggregation tasks
+    devotions = db.collection('Devotions').stream()
+    
+    total_amount = 0
+    count = 0
+    cat_dist = {}
+    
+    for d in devotions:
+        data = d.to_dict()
+        amt = data.get('Amount', 0)
+        cat = data.get('CategoryName') or data.get('CategoryId') or 'Unknown'
+        
+        total_amount += amt
+        count += 1
+        cat_dist[cat] = cat_dist.get(cat, 0) + amt
+        
+    return {
+        "total_amount_all": total_amount,
+        "total_count": count,
+        "category_distribution": cat_dist
+    }
+
 # --- Upload ---
 @router.post("/upload")
 async def upload_devotions(file: UploadFile = File(...)):
@@ -96,7 +123,12 @@ async def create_category(cat: Category):
     return {"status": "created", "id": ref.id}
 
 # --- Users Mgmt ---
-# --- Members Mgmt ---
+@router.delete("/categories/{cat_id}")
+async def delete_category(cat_id: str):
+    db = get_db()
+    # Ideally check usages in Devotions first, but for MVP soft delete or direct delete.
+    db.collection('Categories').document(cat_id).delete()
+    return {"status": "deleted"}
 @router.get("/members")
 async def get_members_list():
     db = get_db()

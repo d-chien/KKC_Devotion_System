@@ -59,9 +59,19 @@
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
                         <div class="bg-gray-50 p-4 rounded-lg">
                             <div class="text-sm text-gray-500">總金額</div>
-                            <div class="text-2xl font-bold mt-1">NT$ 1,230,000</div>
+                            <div class="text-2xl font-bold mt-1" id="dash-total-amount">Loading...</div>
                         </div>
-                        <!-- More stats -->
+                        <div class="bg-gray-50 p-4 rounded-lg">
+                            <div class="text-sm text-gray-500">總筆數</div>
+                            <div class="text-2xl font-bold mt-1" id="dash-total-count">Loading...</div>
+                        </div>
+                    </div>
+                    <!-- Chart -->
+                    <div class="bg-white p-4 rounded-lg shadow mb-8">
+                        <h3 class="text-lg font-semibold mb-4">奉獻類別統計</h3>
+                        <div class="h-64">
+                            <canvas id="categoryChart"></canvas>
+                        </div>
                     </div>
                 </div>
 
@@ -171,6 +181,119 @@
             activeBtn.classList.add('bg-indigo-50', 'text-indigo-600', 'font-medium');
 
             if (tabId === 'users') loadUsers();
+            if (tabId === 'dashboard') loadDashboard(); // Load dashboard data
+            if (tabId === 'categories') loadCategories(); // Load categories
+        }
+
+        // --- Dashboard Data ---
+        let categoryChart = null;
+        async function loadDashboard() {
+            try {
+                // We need an endpoint for admin dashboard stats.
+                // Assuming /api/admin/dashboard or similar. 
+                // Let's create it in backend first or assume it returns AdminDashboardData
+                const res = await fetch('/api/admin/dashboard');
+                if (!res.ok) throw new Error("Failed to load dashboard");
+                const data = await res.json();
+
+                document.getElementById('dash-total-amount').textContent = `NT$ ${data.total_amount_all.toLocaleString()}`;
+                document.getElementById('dash-total-count').textContent = `${data.total_count || 0} 筆`;
+
+                renderChart(data.category_distribution);
+
+            } catch (e) {
+                console.error(e);
+                document.getElementById('dash-total-amount').textContent = "Error";
+            }
+        }
+
+        function renderChart(distribution) {
+            const ctx = document.getElementById('categoryChart').getContext('2d');
+            const labels = Object.keys(distribution);
+            const values = Object.values(distribution);
+
+            if (categoryChart) categoryChart.destroy();
+
+            categoryChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: values,
+                        backgroundColor: [
+                            '#4F46E5', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false
+                }
+            });
+        }
+
+        // --- Categories Mgmt ---
+        async function loadCategories() {
+            const container = document.getElementById('tab-categories');
+            try {
+                const res = await fetch('/api/admin/categories');
+                const cats = await res.json();
+
+                container.innerHTML = `
+                    <h2 class="text-2xl font-bold mb-6">類別管理</h2>
+                    <div class="mb-4">
+                        <button onclick="openCategoryModal()" class="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700">新增類別</button>
+                    </div>
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">類別名稱</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">代碼/備註</th>
+                                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200">
+                            ${cats.map(c => `
+                                <tr>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${c.name}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${c.type || '-'}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                        <button class="text-red-600 hover:text-red-900" onclick="deleteCategory('${c.id}')">刪除</button>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+            } catch (e) { console.error(e); }
+        }
+
+        // Simple Prompt for Category creation (MVP)
+        async function openCategoryModal() {
+            const name = prompt("請輸入類別名稱:");
+            if (!name) return;
+            const type = prompt("請輸入備註 (選填):");
+
+            try {
+                await fetch('/api/admin/categories', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, type })
+                });
+                loadCategories();
+            } catch (e) { alert('新增失敗'); }
+        }
+
+        async function deleteCategory(id) {
+            if (!confirm('確定刪除?')) return;
+            try {
+                const res = await fetch(`/api/admin/categories/${id}`, { method: 'DELETE' });
+                if (res.ok) {
+                    loadCategories();
+                } else {
+                    alert('刪除失敗');
+                }
+            } catch (e) { console.error(e); alert('Error'); }
         }
 
         // Upload Logic
@@ -246,10 +369,8 @@
                 // Right side: Bound User Info (if any)
                 if (data.BoundUser) {
                     document.getElementById('modal-line-name').value = data.BoundUser.LineName || '';
-                    document.getElementById('modal-line-id').value = data.BoundUser.LineId || '';
                 } else {
                     document.getElementById('modal-line-name').value = '未綁定';
-                    document.getElementById('modal-line-id').value = '-';
                 }
 
                 document.getElementById('user-modal').classList.remove('hidden');
@@ -265,26 +386,32 @@
         }
 
         async function saveUser() {
-            // Currently only Unbind is supported properly on backend, 
-            // Name update is placeholder.
-            alert('目前僅支援解除綁定功能');
-            closeModal();
-            /*
-            if(!currentMemberId) return;
+            if (!currentMemberId) return;
             const memberName = document.getElementById('modal-member-name').value;
-            
+            // Member ID update is risky (primary key), usually we don't allow it or handle with care (create new, delete old)
+            // For now, let's allow Name update.
+
             try {
-                 const res = await fetch(`/api/admin/members/${currentMemberId}`, {
-                     method: 'PUT',
-                     headers: { 'Content-Type': 'application/json' },
-                     body: JSON.stringify({
-                         member_name: memberName,
-                         is_unbind: false
-                     })
-                 });
-                 // ...
-            } catch(e) { ... }
-            */
+                const res = await fetch(`/api/admin/members/${currentMemberId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        member_name: memberName,
+                        is_unbind: false
+                    })
+                });
+
+                if (res.ok) {
+                    alert('更新成功');
+                    closeModal();
+                    loadUsers();
+                } else {
+                    alert('更新失敗');
+                }
+            } catch (e) {
+                console.error(e);
+                alert('系統錯誤');
+            }
         }
 
         async function unbindUser() {
