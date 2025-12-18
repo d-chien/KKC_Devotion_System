@@ -104,7 +104,10 @@
                     <h2 class="text-2xl font-bold mb-6">會友管理</h2>
                     <!-- Filters -->
                     <div class="mb-4 flex gap-4">
-                        <input type="text" placeholder="搜尋姓名/編號" class="border rounded px-3 py-2 w-64">
+                        <input type="text" id="member-search" placeholder="搜尋姓名/編號"
+                            class="border rounded px-3 py-2 w-64" onkeyup="if(event.key === 'Enter') filterMembers()">
+                        <button onclick="filterMembers()"
+                            class="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700">搜尋</button>
                     </div>
                     <table class="min-w-full divide-y divide-gray-200">
                         <thead>
@@ -384,16 +387,23 @@
         }
 
         // Member List (Was User List)
+        let allMembers = [];
+
         async function loadUsers() {
             try {
                 const res = await fetch('/api/admin/members');
-                const members = await res.json();
-                const tbody = document.getElementById('user-list');
+                allMembers = await res.json();
 
-                // Sort by ID or Name
-                members.sort((a, b) => (a.id || '').localeCompare(b.id || ''));
+                // Sort by ID
+                allMembers.sort((a, b) => (a.id || '').localeCompare(b.id || ''));
 
-                tbody.innerHTML = members.map(m => `
+                renderMembers(allMembers);
+            } catch (e) { console.error(e); }
+        }
+
+        function renderMembers(members) {
+            const tbody = document.getElementById('user-list');
+            tbody.innerHTML = members.map(m => `
                     <tr>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${m.id}</td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${m.Name || m.MemberName || '-'}</td>
@@ -401,13 +411,28 @@
                             <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${m.isBind ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}">
                                 ${m.isBind ? '已綁定' : '未綁定'}
                             </span>
+                             ${m.BoundUserName ? `<span class="text-xs text-gray-500 ml-2">(${m.BoundUserName})</span>` : ''}
                         </td>
                          <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                             <button class="text-indigo-600 hover:text-indigo-900" onclick="viewUser('${m.id}')">管理</button>
                         </td>
                     </tr>
                 `).join('');
-            } catch (e) { console.error(e); }
+        }
+
+        function filterMembers() {
+            const term = document.getElementById('member-search').value.toLowerCase();
+            if (!term) {
+                renderMembers(allMembers);
+                return;
+            }
+
+            const filtered = allMembers.filter(m => {
+                const id = (m.id || '').toLowerCase();
+                const name = (m.Name || m.MemberName || '').toLowerCase();
+                return id.includes(term) || name.includes(term);
+            });
+            renderMembers(filtered);
         }
 
         let currentMemberId = null;
