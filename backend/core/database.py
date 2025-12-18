@@ -24,7 +24,7 @@ def get_db():
         
         try:
             # Use environment variable for database name if provided, else default to (default)
-            db_name = os.getenv("FIRESTORE_DATABASE", "(default)")
+            db_name = os.getenv("FIRESTORE_DATABASE", "devotion-system")
             
             if db_name == "(default)":
                 db = firestore.client()
