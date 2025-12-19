@@ -28,24 +28,21 @@ async def get_current_user(request: Request):
     expires_at = session_data.get('ExpiresAt')
     
     if expires_at:
-        # Check if expired
-        # Note: Firestore timestamps are timezone-aware.
         if expires_at.replace(tzinfo=None) < datetime.now():
             logger.warning(f"Session expired for token: {token[:8]}...")
             session_ref.delete()
             raise HTTPException(status_code=401, detail="Session expired")
     
     line_id = session_data.get('LineId')
-    
     user_ref = db.collection('Users').document(line_id)
     user = user_ref.get()
     
     if not user.exists:
-        print(f"DEBUG: User not found in 'Users' collection for LineId: {line_id}")
-        raise HTTPException(status_code=404, detail=f"User {line_id} not found")
+        logger.error(f"User not found in 'Users' collection for LineId: {line_id}")
+        raise HTTPException(status_code=404, detail=f"User profile not found")
         
     user_data = user.to_dict()
-    user_data['LineId'] = line_id # Inject ID
+    user_data['LineId'] = line_id
     return user_data
 
 async def get_current_admin(request: Request):
