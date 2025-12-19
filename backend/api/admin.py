@@ -146,7 +146,7 @@ async def upload_members(file: UploadFile = File(...)):
     contents = await file.read()
     try:
         if file.filename.endswith('.csv'):
-            df = pd.read_csv(io.BytesIO(contents), dtypes = str)
+            df = pd.read_csv(io.BytesIO(contents), dtype = str)
         else:
             df = pd.read_excel(io.BytesIO(contents))
     except Exception as e:
