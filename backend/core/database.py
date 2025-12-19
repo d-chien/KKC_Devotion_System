@@ -2,7 +2,7 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 from backend.core.config import settings
 import os
-
+from backend.core.logger import logger
 db = None
 
 def get_db():
@@ -25,6 +25,7 @@ def get_db():
         try:
             # Use environment variable for database name if provided, else default to (default)
             db_name = os.getenv("FIRESTORE_DATABASE", "devotion-system")
+            logger.info(f"Connecting to Firestore: Database={db_name}")
             
             if db_name == "(default)":
                 db = firestore.client()
