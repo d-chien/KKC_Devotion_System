@@ -92,7 +92,7 @@
                             <option value="categories">奉獻類別 (全數取代)</option>
                         </select>
                         <div id="upload-instruction" class="mt-3 text-sm text-indigo-700">
-                            <strong>必填欄位：</strong> DevotionDate, CategoryId, CategoryName, MemberName, MemberId, Amount
+                            <strong>必填欄位：</strong> DevotionDate,CategoryId,CategoryName,MemberName,MemberId,Amount
                             <br><span class="text-xs opacity-75">* 奉獻明細會直接新增至現有紀錄中。</span>
                         </div>
                     </div>
@@ -422,17 +422,17 @@
 
             if (type === 'devotions') {
                 instructionEl.innerHTML = `
-                    <strong>必填欄位：</strong> DevotionDate, CategoryId, CategoryName, MemberName, MemberId, Amount
+                    <strong>必填欄位：</strong> DevotionDate,CategoryId,CategoryName,MemberName,MemberId,Amount
                     <br><span class="text-xs opacity-75">* 奉獻明細會直接新增至現有紀錄中。</span>
                 `;
             } else if (type === 'members') {
                 instructionEl.innerHTML = `
-                    <strong>必填欄位：</strong> MemberId, Name
-                    <br><span class="text-xs text-red-600">* 注意：這將會刪除所有現有門徒紀錄並以此檔案取代。系統會嘗試保留已綁定的狀態。</span>
+                    <strong>必填欄位：</strong> MemberId,Name
+                    <br><span class="text-xs text-red-600">* 注意：這將會刪除所有現有會員資料並以此檔案取代。系統會嘗試保留已綁定的狀態。</span>
                 `;
             } else if (type === 'categories') {
                 instructionEl.innerHTML = `
-                    <strong>必填欄位：</strong> CategoryId, CategoryName, Type (選填)
+                    <strong>必填欄位：</strong> CategoryId,CategoryName,Type (選填)
                     <br><span class="text-xs text-red-600">* 注意：這將會刪除所有現行類別並以此檔案取代。</span>
                 `;
             }
