@@ -95,7 +95,7 @@ async def upload_devotions(file: UploadFile = File(...)):
             doc_ref = devotions_ref.document() # Auto ID
             
             # Convert Date
-            dev_date = row['Date']
+            dev_date = row['DevotionDate']
             if not isinstance(dev_date, datetime):
                  dev_date = pd.to_datetime(dev_date)
 
