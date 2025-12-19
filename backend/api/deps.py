@@ -2,6 +2,7 @@ from fastapi import Depends, HTTPException, status, Request
 from backend.core.database import get_db
 from backend.core.config import settings
 from backend.core.logger import logger
+from datetime import datetime
 
 async def get_current_user(request: Request):
     token = request.cookies.get("__session")
