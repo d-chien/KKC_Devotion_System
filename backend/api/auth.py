@@ -102,6 +102,7 @@ async def line_callback(request: Request, code: str, state: str, error: str = No
             pass
             
         # 0. Delete old sessions for this user
+        sessions_ref = db.collection('Sessions')
         old_sessions = sessions_ref.where('LineId', '==', line_id).stream()
         for old_s in old_sessions:
             old_s.reference.delete()
