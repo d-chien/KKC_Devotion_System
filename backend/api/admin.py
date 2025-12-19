@@ -55,7 +55,7 @@ async def get_admin_dashboard_stats():
     }
 
 # --- Upload ---
-@router.post("/upload")
+@router.post("/upload/devotions")
 async def upload_devotions(file: UploadFile = File(...)):
     # Check extension
     if not file.filename.endswith(('.xlsx', '.csv')):
@@ -135,6 +135,135 @@ async def upload_devotions(file: UploadFile = File(...)):
         action="BULK_UPLOAD",
         details={"filename": file.filename, "records": len(df)}
     )
+    
+    return {"status": "success", "processed": len(df)}
+
+@router.post("/upload/members")
+async def upload_members(file: UploadFile = File(...)):
+    if not file.filename.endswith(('.xlsx', '.csv')):
+        raise HTTPException(status_code=400, detail="Invalid file type")
+    
+    contents = await file.read()
+    try:
+        if file.filename.endswith('.csv'):
+            df = pd.read_csv(io.BytesIO(contents))
+        else:
+            df = pd.read_excel(io.BytesIO(contents))
+    except Exception as e:
+         raise HTTPException(status_code=400, detail=f"Error reading file: {str(e)}")
+         
+    # Expected columns for Members: MemberId, Name
+    if 'MemberId' not in df.columns or 'Name' not in df.columns:
+        raise HTTPException(status_code=400, detail="Missing columns. Required: ['MemberId', 'Name']")
+        
+    db = get_db()
+    
+    # 1. Backup current binding status to preserve it
+    current_members = db.collection('Members').stream()
+    binding_map = {} # MemberId -> {isBind, BindDate}
+    for m in current_members:
+        d = m.to_dict()
+        if d.get('isBind'):
+            binding_map[m.id] = {
+                'isBind': True,
+                'BindDate': d.get('BindDate')
+            }
+            
+    # 2. Delete all current members (Full Replace)
+    # Note: For small scale, we can just delete. 
+    # For large scale, we should use chunks.
+    docs = db.collection('Members').list_documents()
+    batch = db.batch()
+    d_count = 0
+    for doc in docs:
+        batch.delete(doc)
+        d_count += 1
+        if d_count >= 400:
+            batch.commit()
+            batch = db.batch()
+            d_count = 0
+    batch.commit()
+    
+    # 3. Upload new members
+    batch = db.batch()
+    count = 0
+    for _, row in df.iterrows():
+        mid = str(row['MemberId'])
+        name = str(row['Name'])
+        
+        data = {
+            'Name': name,
+            'isBind': binding_map.get(mid, {}).get('isBind', False),
+            'BindDate': binding_map.get(mid, {}).get('BindDate', None)
+        }
+        batch.set(db.collection('Members').document(mid), data)
+        count += 1
+        if count >= 400:
+            batch.commit()
+            batch = db.batch()
+            count = 0
+    batch.commit()
+    
+    logger.info(f"Members full replace completed. {len(df)} records.")
+    record_audit_log("Admin", "ADMIN", "UPLOAD_MEMBERS_FULL_REPLACE", details={"records": len(df)})
+    
+    return {"status": "success", "processed": len(df)}
+
+@router.post("/upload/categories")
+async def upload_categories(file: UploadFile = File(...)):
+    if not file.filename.endswith(('.xlsx', '.csv')):
+        raise HTTPException(status_code=400, detail="Invalid file type")
+    
+    contents = await file.read()
+    try:
+        if file.filename.endswith('.csv'):
+            df = pd.read_csv(io.BytesIO(contents))
+        else:
+            df = pd.read_excel(io.BytesIO(contents))
+    except Exception as e:
+         raise HTTPException(status_code=400, detail=f"Error reading file: {str(e)}")
+         
+    # Expected columns for Categories: CategoryId, CategoryName, Type
+    if 'CategoryId' not in df.columns or 'CategoryName' not in df.columns:
+        raise HTTPException(status_code=400, detail="Missing columns. Required: ['CategoryId', 'CategoryName']")
+        
+    db = get_db()
+    
+    # 1. Delete all current categories
+    docs = db.collection('Categories').list_documents()
+    batch = db.batch()
+    d_count = 0
+    for doc in docs:
+        batch.delete(doc)
+        d_count += 1
+        if d_count >= 400:
+            batch.commit()
+            batch = db.batch()
+            d_count = 0
+    batch.commit()
+    
+    # 2. Upload new categories
+    batch = db.batch()
+    count = 0
+    for _, row in df.iterrows():
+        cid = str(row['CategoryId'])
+        name = str(row['CategoryName'])
+        type_val = str(row['Type']) if 'Type' in df.columns and not pd.isna(row['Type']) else ""
+        
+        data = {
+            'name': name,
+            'type': type_val
+        }
+        batch.set(db.collection('Categories').document(cid), data)
+        count += 1
+        if count >= 400:
+            batch.commit()
+            batch = db.batch()
+            count = 0
+    batch.commit()
+    
+    logger.info(f"Categories full replace completed. {len(df)} records.")
+    record_audit_log("Admin", "ADMIN", "UPLOAD_CATEGORIES_FULL_REPLACE", details={"records": len(df)})
     
     return {"status": "success", "processed": len(df)}
 

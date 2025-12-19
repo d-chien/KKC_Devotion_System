@@ -80,7 +80,23 @@
 
                 <!-- Tab: Upload -->
                 <div id="tab-upload" class="tab-content hidden">
-                    <h2 class="text-2xl font-bold mb-6">上傳奉獻資料</h2>
+                    <h2 class="text-2xl font-bold mb-6">資料上傳</h2>
+
+                    <div class="mb-6 bg-indigo-50 p-4 rounded-lg">
+                        <label class="block text-sm font-medium text-indigo-900 mb-2">請選擇上傳類型</label>
+                        <select id="upload-type"
+                            class="w-full md:w-64 border-indigo-200 rounded-md px-3 py-2 text-indigo-900 focus:ring-indigo-500 focus:border-indigo-500"
+                            onchange="updateUploadInstructions()">
+                            <option value="devotions">奉獻明細 (增量上傳)</option>
+                            <option value="members">會友資料 (全數取代)</option>
+                            <option value="categories">奉獻類別 (全數取代)</option>
+                        </select>
+                        <div id="upload-instruction" class="mt-3 text-sm text-indigo-700">
+                            <strong>必填欄位：</strong> DevotionDate, CategoryId, CategoryName, MemberName, MemberId, Amount
+                            <br><span class="text-xs opacity-75">* 奉獻明細會直接新增至現有紀錄中。</span>
+                        </div>
+                    </div>
+
                     <div class="border-2 border-dashed border-gray-300 rounded-lg p-12 text-center" id="drop-zone">
                         <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none"
                             viewBox="0 0 48 48" aria-hidden="true">
@@ -400,22 +416,63 @@
             }
         });
 
+        function updateUploadInstructions() {
+            const type = document.getElementById('upload-type').value;
+            const instructionEl = document.getElementById('upload-instruction');
+
+            if (type === 'devotions') {
+                instructionEl.innerHTML = `
+                    <strong>必填欄位：</strong> DevotionDate, CategoryId, CategoryName, MemberName, MemberId, Amount
+                    <br><span class="text-xs opacity-75">* 奉獻明細會直接新增至現有紀錄中。</span>
+                `;
+            } else if (type === 'members') {
+                instructionEl.innerHTML = `
+                    <strong>必填欄位：</strong> MemberId, Name
+                    <br><span class="text-xs text-red-600">* 注意：這將會刪除所有現有門徒紀錄並以此檔案取代。系統會嘗試保留已綁定的狀態。</span>
+                `;
+            } else if (type === 'categories') {
+                instructionEl.innerHTML = `
+                    <strong>必填欄位：</strong> CategoryId, CategoryName, Type (選填)
+                    <br><span class="text-xs text-red-600">* 注意：這將會刪除所有現行類別並以此檔案取代。</span>
+                `;
+            }
+        }
+
         async function uploadFile() {
             const file = fileInput.files[0];
+            const type = document.getElementById('upload-type').value;
             if (!file) return;
+
+            const confirmMsg = type === 'devotions'
+                ? '確定要上傳奉獻明細嗎？'
+                : '警告：此操作將全數取代現有資料。確定要繼續嗎？';
+
+            if (!confirm(confirmMsg)) return;
 
             const formData = new FormData();
             formData.append('file', file);
 
+            let endpoint = '/api/admin/upload/devotions';
+            if (type === 'members') endpoint = '/api/admin/upload/members';
+            if (type === 'categories') endpoint = '/api/admin/upload/categories';
+
             try {
-                const res = await fetch('/api/admin/upload', {
+                const res = await fetch(endpoint, {
                     method: 'POST',
                     credentials: 'include',
                     body: formData
                 });
                 const data = await res.json();
-                alert(res.ok ? `上傳成功: ${data.processed} 筆` : `上傳失敗: ${data.detail}`);
+                if (res.ok) {
+                    alert(`上傳成功: ${data.processed} 筆`);
+                    // Reset
+                    fileInput.value = '';
+                    document.getElementById('file-info').classList.add('hidden');
+                } else {
+                    alert(`上傳失敗: ${data.detail || data.message || '未知錯誤'}`);
+                }
             } catch (e) {
+                logger.error("uploadFile error", e);
                 alert("上傳錯誤");
             }
         }
