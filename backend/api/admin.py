@@ -221,9 +221,9 @@ async def upload_categories(file: UploadFile = File(...)):
     contents = await file.read()
     try:
         if file.filename.endswith('.csv'):
-            df = pd.read_csv(io.BytesIO(contents))
+            df = pd.read_csv(io.BytesIO(contents),dtype = str)
         else:
-            df = pd.read_excel(io.BytesIO(contents))
+            df = pd.read_excel(io.BytesIO(contents),dtype = str)
     except Exception as e:
          raise HTTPException(status_code=400, detail=f"Error reading file: {str(e)}")
          
