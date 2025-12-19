@@ -65,9 +65,13 @@ async def upload_devotions(file: UploadFile = File(...)):
     
     try:
         if file.filename.endswith('.csv'):
-            df = pd.read_csv(io.BytesIO(contents))
+            df = pd.read_csv(io.BytesIO(contents), dtype=str)
+            df.Amount = df.Amount.astype(int)
+            df.DevotionDate = pd.to_datetime(df.DevotionDate, format='%Y-%m-%d')
         else:
-            df = pd.read_excel(io.BytesIO(contents))
+            df = pd.read_excel(io.BytesIO(contents), dtype=str)
+            df.Amount = df.Amount.astype(int)
+            df.DevotionDate = pd.to_datetime(df.DevotionDate, format='%Y-%m-%d')
     except Exception as e:
          raise HTTPException(status_code=400, detail=f"Error reading file: {str(e)}")
          
