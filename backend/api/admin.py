@@ -118,6 +118,7 @@ async def upload_devotions(file: UploadFile = File(...)):
                 
         except Exception as e:
             errors.append(f"Row {index+1}: {str(e)}")
+            logger.error(f'Error log: {index+1}: {str(e)}')
             
     if count > 0:
         batch.commit()
