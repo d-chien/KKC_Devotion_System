@@ -20,13 +20,16 @@ document.addEventListener('DOMContentLoaded', async () => {
 async function checkAuth() {
     try {
         const res = await fetch(`${API_BASE}/user/me`, { credentials: 'include' });
-        if (res.status === 401 || res.status === 403) {
-            logger.info("User not authenticated, showing login");
+        if (res.status === 401 || res.status === 403 || res.status === 404) {
+            logger.info(`User access issue (status ${res.status}), showing login`);
             showLogin();
             return;
         }
 
-        if (!res.ok) throw new Error("Failed to fetch user");
+        if (!res.ok) {
+            const errorText = await res.text();
+            throw new Error(`Failed to fetch user (status ${res.status}): ${errorText}`);
+        }
 
         userData = await res.json();
         logger.debug("User data loaded", userData);

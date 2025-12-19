@@ -31,9 +31,19 @@ def get_db():
             else:
                 from google.cloud import firestore as google_firestore
                 project_id = os.getenv('GOOGLE_CLOUD_PROJECT', os.getenv('GCP_PROJECT_ID'))
-                db = google_firestore.Client(project=project_id, database=db_name)
+                
+                # Use the same credentials as firebase_admin if file exists
+                client_kwargs = {"project": project_id, "database": db_name}
+                if os.path.exists(settings.FIREBASE_CREDENTIALS_PATH):
+                    from google.oauth2 import service_account
+                    client_kwargs["credentials"] = service_account.Credentials.from_service_account_file(
+                        settings.FIREBASE_CREDENTIALS_PATH
+                    )
+                
+                logger.info(f"Connecting to Firestore: Project={project_id}, Database={db_name}")
+                db = google_firestore.Client(**client_kwargs)
             
-            print(f"Successfully connected to Firestore DB: {db_name}")
+            logger.info(f"Successfully connected to Firestore DB: {db_name}")
         except Exception as e:
             print(f"Failed to connect to Firestore. Error: {e}")
             db = firestore.client()

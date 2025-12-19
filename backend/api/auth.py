@@ -2,7 +2,7 @@ from fastapi import APIRouter, Request, Depends, HTTPException, status
 from fastapi.responses import RedirectResponse
 import httpx
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from backend.core.config import settings
 from backend.core.database import get_db
 from backend.schemas import Token
@@ -101,13 +101,21 @@ async def line_callback(request: Request, code: str, state: str, error: str = No
             # Update name if changed?
             pass
             
+        # 0. Delete old sessions for this user
+        old_sessions = sessions_ref.where('LineId', '==', line_id).stream()
+        for old_s in old_sessions:
+            old_s.reference.delete()
+            
         # Create Session
         session_token = str(uuid.uuid4())
+        expires_at = datetime.now() + timedelta(days=30)
+        
         # Store session in Firestore
         sessions_ref = db.collection('Sessions')
         sessions_ref.document(session_token).set({
             'LineId': line_id,
             'CreatedAt': datetime.now(),
+            'ExpiresAt': expires_at,
             'Role': 'User'
         })
         
@@ -133,7 +141,8 @@ async def line_callback(request: Request, code: str, state: str, error: str = No
             httponly=True,
             secure=is_secure,
             samesite="lax",
-            path="/"
+            path="/",
+            max_age=30 * 24 * 60 * 60 # 30 days
         )
         return response
 
@@ -143,13 +152,23 @@ from fastapi import Body
 @router.post('/admin/login')
 async def admin_login(username: str = Body(...), password: str = Body(...)):
     if username == settings.ADMIN_USERNAME and password == settings.ADMIN_PASSWORD:
-        # Create Admin Session
-        session_token = str(uuid.uuid4())
         db = get_db()
         sessions_ref = db.collection('Sessions')
+        admin_id = 'ADMIN_USER'
+        
+        # 0. Delete old sessions
+        old_sessions = sessions_ref.where('LineId', '==', admin_id).stream()
+        for old_s in old_sessions:
+            old_s.reference.delete()
+
+        # Create Admin Session
+        session_token = str(uuid.uuid4())
+        expires_at = datetime.now() + timedelta(days=30)
+        
         sessions_ref.document(session_token).set({
-            'LineId': 'ADMIN_USER', # Special ID for admin
+            'LineId': admin_id,
             'CreatedAt': datetime.now(),
+            'ExpiresAt': expires_at,
             'Role': 'Admin'
         })
         
@@ -163,7 +182,12 @@ async def admin_login(username: str = Body(...), password: str = Body(...)):
         )
         
         response = RedirectResponse(url='/admin/dashboard.html', status_code=303)
-        response.set_cookie(key="__session", value=session_token, httponly=True)
+        response.set_cookie(
+            key="__session", 
+            value=session_token, 
+            httponly=True,
+            max_age=30 * 24 * 60 * 60 # 30 days
+        )
         return response
     else:
         logger.warning(f"Admin login failed for user: {username}")

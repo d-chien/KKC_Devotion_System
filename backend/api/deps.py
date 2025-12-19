@@ -12,6 +12,7 @@ async def get_current_user(request: Request):
             token = auth_header.split(" ")[1]
     
     if not token:
+        logger.warning("Authentication token not found in cookie or header.")
         raise HTTPException(status_code=401, detail="Not authenticated")
     
     db = get_db()
@@ -23,6 +24,16 @@ async def get_current_user(request: Request):
         raise HTTPException(status_code=401, detail="Session invalid")
     
     session_data = session.to_dict()
+    expires_at = session_data.get('ExpiresAt')
+    
+    if expires_at:
+        # Check if expired
+        # Note: Firestore timestamps are timezone-aware.
+        if expires_at.replace(tzinfo=None) < datetime.now():
+            logger.warning(f"Session expired for token: {token[:8]}...")
+            session_ref.delete()
+            raise HTTPException(status_code=401, detail="Session expired")
+    
     line_id = session_data.get('LineId')
     
     user_ref = db.collection('Users').document(line_id)
