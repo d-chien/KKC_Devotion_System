@@ -72,7 +72,7 @@ async def upload_devotions(file: UploadFile = File(...)):
          raise HTTPException(status_code=400, detail=f"Error reading file: {str(e)}")
          
     # Expected columns: Date, Category, Amount, MemberId, MemberName
-    required_cols = ['Date', 'Category', 'Amount', 'MemberId']
+    required_cols = ['DevotionDate', 'CategoryId','CategoryName','MemberName','MemberId', 'Amount']
     if not all(col in df.columns for col in required_cols):
         raise HTTPException(status_code=400, detail=f"Missing columns. Required: {required_cols}")
         
@@ -102,8 +102,8 @@ async def upload_devotions(file: UploadFile = File(...)):
             data = {
                 'MemberId': str(row['MemberId']),
                 'MemberName': row.get('MemberName', ''),
-                'CategoryId': str(row['Category']), # Using Name as ID for simplicity or lookup
-                'CategoryName': str(row['Category']),
+                'CategoryId': str(row['CategoryId']), # Using Name as ID for simplicity or lookup
+                'CategoryName': str(row['CategoryName']),
                 'Amount': int(row['Amount']),
                 'DevotionDate': dev_date,
                 'CreatedAt': datetime.now()
