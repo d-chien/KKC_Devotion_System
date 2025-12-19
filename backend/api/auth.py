@@ -7,6 +7,8 @@ from backend.core.config import settings
 from backend.core.database import get_db
 from backend.schemas import Token
 from backend.api import deps
+from backend.core.logger import logger
+from backend.core.audit import record_audit_log
 # Only import if you have deps specific logic, otherwise define here
 
 router = APIRouter()
@@ -18,6 +20,7 @@ LINE_PROFILE_URL = 'https://api.line.me/v2/profile'
 
 @router.get('/line/login')
 async def line_login(request: Request):
+    logger.debug("Starting LINE login flow")
     state = str(uuid.uuid4())
     scope = 'profile openid'
     
@@ -45,7 +48,10 @@ async def line_login(request: Request):
 @router.get('/line/callback', name='line_callback')
 async def line_callback(request: Request, code: str, state: str, error: str = None, error_description: str = None):
     if error:
+        logger.error(f"LINE login error: {error_description}")
         raise HTTPException(status_code=400, detail=error_description)
+    
+    logger.info(f"Received LINE callback with state: {state}")
     
     # Must match exactly the redirect_uri used in the login step
     base_url = settings.FRONTEND_URL.rstrip('/')
@@ -105,6 +111,15 @@ async def line_callback(request: Request, code: str, state: str, error: str = No
             'Role': 'User'
         })
         
+        logger.info(f"User {line_id} logged in successfully, session: {session_token}")
+        
+        record_audit_log(
+            operator_type="User",
+            operator_id=line_id,
+            action="LOGIN",
+            details={"session_id": session_token[:8] + "..."}
+        )
+        
         # Redirect to Home with token (or set cookie)
         # Using 303 See Other is better for redirections after logic
         response = RedirectResponse(url=settings.FRONTEND_URL, status_code=303)
@@ -138,10 +153,20 @@ async def admin_login(username: str = Body(...), password: str = Body(...)):
             'Role': 'Admin'
         })
         
+        logger.info(f"Admin logged in successfully, session: {session_token}")
+        
+        record_audit_log(
+            operator_type="Admin",
+            operator_id="ADMIN",
+            action="LOGIN",
+            details={"session_id": session_token[:8] + "..."}
+        )
+        
         response = RedirectResponse(url='/admin/dashboard.html', status_code=303)
         response.set_cookie(key="__session", value=session_token, httponly=True)
         return response
     else:
+        logger.warning(f"Admin login failed for user: {username}")
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
 @router.get('/logout')

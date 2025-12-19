@@ -1,6 +1,7 @@
 from fastapi import Depends, HTTPException, status, Request
 from backend.core.database import get_db
 from backend.core.config import settings
+from backend.core.logger import logger
 
 async def get_current_user(request: Request):
     token = request.cookies.get("__session")
@@ -18,6 +19,7 @@ async def get_current_user(request: Request):
     session = session_ref.get()
     
     if not session.exists:
+        logger.warning(f"Session not found or expired: {token[:8]}...")
         raise HTTPException(status_code=401, detail="Session invalid")
     
     session_data = session.to_dict()

@@ -43,10 +43,13 @@
                             data-tab="upload">資料上傳</button></li>
                     <li><button onclick="switchTab('users')"
                             class="w-full text-left px-3 py-2 rounded-md hover:bg-gray-50 text-gray-700 tab-btn"
-                            data-tab="users">使用者管理</button></li>
+                            data-tab="users">會友管理</button></li>
                     <li><button onclick="switchTab('categories')"
                             class="w-full text-left px-3 py-2 rounded-md hover:bg-gray-50 text-gray-700 tab-btn"
                             data-tab="categories">奉獻類別管理</button></li>
+                    <li><button onclick="switchTab('audit')"
+                            class="w-full text-left px-3 py-2 rounded-md hover:bg-gray-50 text-gray-700 tab-btn"
+                            data-tab="audit">稽核日誌</button></li>
                 </ul>
             </nav>
 
@@ -129,6 +132,27 @@
                     <h2 class="text-2xl font-bold mb-6">類別管理</h2>
                     <!-- Content -->
                 </div>
+
+                <!-- Tab: Audit Logs -->
+                <div id="tab-audit" class="tab-content hidden">
+                    <h2 class="text-2xl font-bold mb-6">稽核日誌</h2>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">時間</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">操作者</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">動作</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">對象</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">細節</th>
+                                </tr>
+                            </thead>
+                            <tbody id="audit-list" class="bg-white divide-y divide-gray-200">
+                                <!-- JS fill -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             </main>
         </div>
     </div>
@@ -203,6 +227,13 @@
     </div>
 
     <script>
+        // Logging Utility
+        const logger = {
+            debug: (...args) => console.debug('[DEBUG]', new Date().toISOString(), ...args),
+            info: (...args) => console.info('[INFO]', new Date().toISOString(), ...args),
+            warn: (...args) => console.warn('[WARN]', new Date().toISOString(), ...args),
+            error: (...args) => console.error('[ERROR]', new Date().toISOString(), ...args)
+        };
         // Tab Switching
         function switchTab(tabId) {
             document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
@@ -219,6 +250,7 @@
             if (tabId === 'users') loadUsers();
             if (tabId === 'dashboard') loadDashboard(); // Load dashboard data
             if (tabId === 'categories') loadCategories(); // Load categories
+            if (tabId === 'audit') loadAuditLogs(); // Load audit logs
         }
 
         // --- Dashboard Data ---
@@ -521,6 +553,23 @@
                     alert('操作失敗');
                 }
             } catch (e) { console.error(e); alert('Error'); }
+        }
+
+        async function loadAuditLogs() {
+            try {
+                const res = await fetch('/api/admin/audit-logs', { credentials: 'include' });
+                const logs = await res.json();
+                const tbody = document.getElementById('audit-list');
+                tbody.innerHTML = logs.map(l => `
+                    <tr>
+                        <td class="px-6 py-4 whitespace-nowrap text-xs text-gray-500">${new Date(l.Timestamp).toLocaleString()}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${l.OperatorType} (${l.OperatorId})</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-indigo-600">${l.Action}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${l.TargetId || '-'}</td>
+                        <td class="px-6 py-4 text-xs text-gray-500">${JSON.stringify(l.Details)}</td>
+                    </tr>
+                `).join('');
+            } catch (e) { logger.error("loadAuditLogs error", e); }
         }
 
         function adminLogout() {

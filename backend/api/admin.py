@@ -5,6 +5,8 @@ import pandas as pd
 import io
 from datetime import datetime
 from backend.schemas import Category, UserUpdate
+from backend.core.logger import logger
+from backend.core.audit import record_audit_log
 
 router = APIRouter()
 
@@ -44,6 +46,8 @@ async def get_admin_dashboard_stats():
         count += 1
         cat_dist[cat] = cat_dist.get(cat, 0) + amt
         
+    logger.debug(f"Admin dashboard loaded: {count} items, total {total_amount}")
+    
     return {
         "total_amount_all": total_amount,
         "total_count": count,
@@ -119,8 +123,18 @@ async def upload_devotions(file: UploadFile = File(...)):
         batch.commit()
         
     if errors:
+        logger.warning(f"File {file.filename} uploaded with {len(errors)} errors")
         return {"status": "partial_success", "processed": len(df) - len(errors), "errors": errors}
-        
+    
+    logger.info(f"File {file.filename} uploaded successfully. {len(df)} records processed.")
+    
+    record_audit_log(
+        operator_type="Admin",
+        operator_id="ADMIN",
+        action="BULK_UPLOAD",
+        details={"filename": file.filename, "records": len(df)}
+    )
+    
     return {"status": "success", "processed": len(df)}
 
 # --- Categories ---
@@ -144,6 +158,17 @@ async def create_category(cat: Category):
         ref = db.collection('Categories').document()
         
     ref.set(cat.dict())
+    
+    logger.info(f"Category created: {cat.name} ({ref.id})")
+    
+    record_audit_log(
+        operator_type="Admin",
+        operator_id="ADMIN",
+        action="CREATE_CATEGORY",
+        target_id=ref.id,
+        details={"name": cat.name}
+    )
+    
     return {"status": "created", "id": ref.id}
 
 # --- Users Mgmt ---
@@ -152,6 +177,16 @@ async def delete_category(cat_id: str):
     db = get_db()
     # Ideally check usages in Devotions first, but for MVP soft delete or direct delete.
     db.collection('Categories').document(cat_id).delete()
+    
+    logger.info(f"Category deleted: {cat_id}")
+    
+    record_audit_log(
+        operator_type="Admin",
+        operator_id="ADMIN",
+        action="DELETE_CATEGORY",
+        target_id=cat_id
+    )
+    
     return {"status": "deleted"}
 @router.get("/members")
 async def get_members_list():
@@ -247,7 +282,22 @@ async def update_member(member_id: str, update_data: UserUpdate):
                  users = db.collection('Users').where('MemberId', '==', member_id).stream()
                  for u in users:
                      u.reference.update({'MemberName': updates['Name']})
+    
+    logger.info(f"Member {member_id} updated. Unbind={update_data.is_unbind}")
+    
+    record_audit_log(
+        operator_type="Admin",
+        operator_id="ADMIN",
+        action="UNBIND_MEMBER" if update_data.is_unbind else "UPDATE_MEMBER",
+        target_id=member_id,
+        details={"is_unbind": update_data.is_unbind, "member_name": update_data.member_name}
+    )
 
     return {"status": "success"}
 
 # Additional admin mgmt endpoints here...
+@router.get("/audit-logs")
+async def get_audit_logs():
+    db = get_db()
+    logs = db.collection('AuditLogs').order_by('Timestamp', direction='DESCENDING').limit(100).stream()
+    return [{"id": l.id, **l.to_dict()} for l in logs]

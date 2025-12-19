@@ -78,3 +78,12 @@ class UploadResult(BaseModel):
     total_records: int = 0
     message: str
     errors: Optional[List[str]] = None
+
+class AuditLog(BaseModel):
+    id: Optional[str] = None
+    operator_type: str # "Admin" | "User"
+    operator_id: str
+    action: str
+    target_id: Optional[str] = None
+    details: Optional[Dict[str, Any]] = None
+    timestamp: datetime

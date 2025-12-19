@@ -2,6 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from backend.api import deps
 from backend.schemas import DashboardData, Devotion, UserBind
 from backend.core.database import get_db
+from backend.core.logger import logger
+from backend.core.audit import record_audit_log
 from typing import List, Optional
 from datetime import datetime
 
@@ -9,6 +11,7 @@ router = APIRouter()
 
 @router.get('/me')
 async def get_me(current_user: dict = Depends(deps.get_current_user)):
+    logger.debug(f"Fetching profile for user: {current_user.get('LineId')}")
     return {
         "LineId": current_user.get('LineId'),
         "LineName": current_user.get('LineName'),
@@ -46,6 +49,16 @@ async def bind_user(bind_data: UserBind, current_user: dict = Depends(deps.get_c
         'isBind': True
     })
     
+    logger.info(f"User {current_user['LineId']} bound to Member {bind_data.member_id}")
+    
+    record_audit_log(
+        operator_type="User",
+        operator_id=current_user['LineId'],
+        action="BIND_MEMBER",
+        target_id=bind_data.member_id,
+        details={"member_name": bind_data.member_name}
+    )
+    
     return {"status": "success"}
 
 @router.get('/dashboard')
@@ -82,6 +95,8 @@ async def get_dashboard(current_user: dict = Depends(deps.get_current_user)):
 
     # Sort in memory for now (MVP)
     devotions.sort(key=lambda x: x.get('DevotionDate', ''), reverse=True)
+    
+    logger.debug(f"Dashboard loaded for user {member_id}: {len(devotions)} items")
     
     return {
         "total_amount": total_amount,

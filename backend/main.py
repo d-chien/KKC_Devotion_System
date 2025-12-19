@@ -3,9 +3,21 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from backend.core.config import settings
 from backend.api import auth, users, admin
+from backend.core.logger import setup_logging, logger
 import os
+import time
+from fastapi import Request
 
+setup_logging()
 app = FastAPI(title=settings.PROJECT_NAME, openapi_url=f"{settings.API_V1_STR}/openapi.json")
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    start_time = time.time()
+    response = await call_next(request)
+    duration = time.time() - start_time
+    logger.info(f"{request.method} {request.url.path} - {response.status_code} ({duration:.2f}s)")
+    return response
 
 # CORS
 origins = [

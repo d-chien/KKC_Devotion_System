@@ -1,5 +1,13 @@
 const API_BASE = '/api';
 
+// Logging Utility
+const logger = {
+    debug: (...args) => console.debug('[DEBUG]', new Date().toISOString(), ...args),
+    info: (...args) => console.info('[INFO]', new Date().toISOString(), ...args),
+    warn: (...args) => console.warn('[WARN]', new Date().toISOString(), ...args),
+    error: (...args) => console.error('[ERROR]', new Date().toISOString(), ...args)
+};
+
 // State
 let userData = null;
 let dashboardData = null;
@@ -13,6 +21,7 @@ async function checkAuth() {
     try {
         const res = await fetch(`${API_BASE}/user/me`, { credentials: 'include' });
         if (res.status === 401 || res.status === 403) {
+            logger.info("User not authenticated, showing login");
             showLogin();
             return;
         }
@@ -20,6 +29,7 @@ async function checkAuth() {
         if (!res.ok) throw new Error("Failed to fetch user");
 
         userData = await res.json();
+        logger.debug("User data loaded", userData);
 
         if (!userData.IsBound) {
             showBindModal();
@@ -29,7 +39,7 @@ async function checkAuth() {
         }
 
     } catch (e) {
-        console.error(e);
+        logger.error("checkAuth error", e);
         showLogin();
     }
 }
@@ -79,10 +89,12 @@ async function submitBind() {
 
         if (!res.ok) {
             const err = await res.json();
+            logger.warn("Binding failed", err);
             alert(err.detail || "綁定失敗");
             return;
         }
 
+        logger.info("Binding successful");
         document.getElementById('bind-modal').classList.add('hidden');
         // Reload or update state
         location.reload();
@@ -100,7 +112,7 @@ async function loadDashboard() {
         dashboardData = await res.json();
         renderDashboard();
     } catch (e) {
-        console.error(e);
+        logger.error("loadDashboard error", e);
     }
 }
 
