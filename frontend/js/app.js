@@ -21,7 +21,8 @@ async function checkAuth() {
     try {
         const res = await fetch(`${API_BASE}/user/me`, { credentials: 'include' });
         if (res.status === 401 || res.status === 403 || res.status === 404) {
-            logger.info(`User access issue (status ${res.status}), showing login`);
+            const errorBody = await res.text();
+            logger.info(`User access issue (status ${res.status}): ${errorBody}, showing login`);
             showLogin();
             return;
         }

@@ -35,10 +35,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Health Check
+@app.get("/api/health")
+async def health_check():
+    return {"status": "ok", "environment": os.getenv("K_SERVICE", "local")}
+
 # Routes
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(users.router, prefix="/api/user", tags=["users"])
 app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
+
+@app.api_route("/api/{path_name:path}", methods=["GET", "POST", "PUT", "DELETE"])
+async def catch_all_api(path_name: str):
+    logger.warning(f"Unmatched API request: /api/{path_name}")
+    raise HTTPException(status_code=404, detail=f"API route /api/{path_name} not found")
 
 # Static Files
 # Construct path to frontend

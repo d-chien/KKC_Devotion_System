@@ -38,8 +38,8 @@ async def get_current_user(request: Request):
     user = user_ref.get()
     
     if not user.exists:
-        logger.error(f"User not found in 'Users' collection for LineId: {line_id}")
-        raise HTTPException(status_code=404, detail=f"User profile not found")
+        logger.error(f"AUTH_ERROR: User document missing in Firestore for LineId: {line_id}")
+        raise HTTPException(status_code=404, detail=f"User profile not found for ID: {line_id}")
         
     user_data = user.to_dict()
     user_data['LineId'] = line_id
