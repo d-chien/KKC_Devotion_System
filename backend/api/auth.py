@@ -184,9 +184,12 @@ async def admin_login(username: str = Body(...), password: str = Body(...)):
         
         response = RedirectResponse(url='/admin/dashboard.html', status_code=303)
         response.set_cookie(
-            key="__session", 
+            key="__admin_session", 
             value=session_token, 
             httponly=True,
+            secure=True, # Recommended for HTTPS
+            samesite="lax",
+            path="/",
             max_age=30 * 24 * 60 * 60 # 30 days
         )
         return response

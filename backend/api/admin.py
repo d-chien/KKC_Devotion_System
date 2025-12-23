@@ -12,7 +12,7 @@ router = APIRouter()
 
 # --- Dashboard Stats ---
 @router.get("/dashboard")
-async def get_admin_dashboard_stats():
+async def get_admin_dashboard_stats(admin: dict = Depends(deps.get_current_admin)):
     db = get_db()
     
     # 1. Get Total Count using Aggregation Query (Efficient)
@@ -56,7 +56,7 @@ async def get_admin_dashboard_stats():
 
 # --- Upload ---
 @router.post("/upload/devotions")
-async def upload_devotions(file: UploadFile = File(...)):
+async def upload_devotions(file: UploadFile = File(...), admin: dict = Depends(deps.get_current_admin)):
     # Check extension
     if not file.filename.endswith(('.xlsx', '.csv')):
         raise HTTPException(status_code=400, detail="Invalid file type")
@@ -143,7 +143,7 @@ async def upload_devotions(file: UploadFile = File(...)):
     return {"status": "success", "processed": len(df)}
 
 @router.post("/upload/members")
-async def upload_members(file: UploadFile = File(...)):
+async def upload_members(file: UploadFile = File(...), admin: dict = Depends(deps.get_current_admin)):
     if not file.filename.endswith(('.xlsx', '.csv')):
         raise HTTPException(status_code=400, detail="Invalid file type")
     
@@ -214,7 +214,7 @@ async def upload_members(file: UploadFile = File(...)):
     return {"status": "success", "processed": len(df)}
 
 @router.post("/upload/categories")
-async def upload_categories(file: UploadFile = File(...)):
+async def upload_categories(file: UploadFile = File(...), admin: dict = Depends(deps.get_current_admin)):
     if not file.filename.endswith(('.xlsx', '.csv')):
         raise HTTPException(status_code=400, detail="Invalid file type")
     
@@ -273,7 +273,7 @@ async def upload_categories(file: UploadFile = File(...)):
 
 # --- Categories ---
 @router.get("/categories")
-async def get_categories():
+async def get_categories(admin: dict = Depends(deps.get_current_admin)):
     db = get_db()
     cats = db.collection('Categories').stream()
     return [{"id": c.id, **c.to_dict()} for c in cats]
@@ -323,7 +323,7 @@ async def delete_category(cat_id: str):
     
     return {"status": "deleted"}
 @router.get("/members")
-async def get_members_list():
+async def get_members_list(admin: dict = Depends(deps.get_current_admin)):
     db = get_db()
     # List all members from Members collection
     members = db.collection('Members').stream()
@@ -431,7 +431,7 @@ async def update_member(member_id: str, update_data: UserUpdate):
 
 # Additional admin mgmt endpoints here...
 @router.get("/audit-logs")
-async def get_audit_logs():
+async def get_audit_logs(admin: dict = Depends(deps.get_current_admin)):
     db = get_db()
     logs = db.collection('AuditLogs').order_by('Timestamp', direction='DESCENDING').limit(100).stream()
     return [{"id": l.id, **l.to_dict()} for l in logs]
