@@ -39,8 +39,8 @@ async def get_current_user(request: Request):
     return user_data
 
 async def get_current_admin(request: Request):
-    """Dependency for admin endpoints. Uses __admin_session cookie."""
-    token = request.cookies.get("__admin_session")
+    """Dependency for admin endpoints. Uses __session cookie."""
+    token = request.cookies.get("__session")
     if not token:
         logger.warning("Admin session token not found.")
         raise HTTPException(status_code=401, detail="Admin authentication required")

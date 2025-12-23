@@ -182,12 +182,15 @@ async def admin_login(username: str = Body(...), password: str = Body(...)):
             details={"session_id": session_token[:8] + "..."}
         )
         
+        # Determine if we should set Secure flag (True if on HTTPS or production)
+        is_secure = settings.FRONTEND_URL.startswith("https")
+        
         response = RedirectResponse(url='/admin/dashboard.html', status_code=303)
         response.set_cookie(
-            key="__admin_session", 
+            key="__session", 
             value=session_token, 
             httponly=True,
-            secure=True, # Recommended for HTTPS
+            secure=is_secure,
             samesite="lax",
             path="/",
             max_age=30 * 24 * 60 * 60 # 30 days
