@@ -23,7 +23,8 @@ class Settings(BaseSettings):
     
     # Simple Admin Auth
     ADMIN_USERNAME: str = os.getenv("ADMIN_USERNAME", "admin")
-    ADMIN_PASSWORD: str = os.getenv("ADMIN_PASSWORD", "admin123")
+    # Default is bcrypt hash for 'admin123'
+    ADMIN_PASSWORD: str = os.getenv("ADMIN_PASSWORD", "$2b$12$l7JBkqOwgq4NmACZWkJIjO.moeT3HR9Jf3ATjUoELXuk3wh5WlFMa")
     LINE_LIFF_ID: str = os.getenv("LINE_LIFF_ID", "")
 
     class Config:

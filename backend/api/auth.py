@@ -9,6 +9,7 @@ from backend.schemas import Token
 from backend.api import deps
 from backend.core.logger import logger
 from backend.core.audit import record_audit_log
+from backend.core.security import verify_password
 # Only import if you have deps specific logic, otherwise define here
 
 router = APIRouter()
@@ -152,7 +153,7 @@ from fastapi import Body
 
 @router.post('/admin/login')
 async def admin_login(username: str = Body(...), password: str = Body(...)):
-    if username == settings.ADMIN_USERNAME and password == settings.ADMIN_PASSWORD:
+    if username == settings.ADMIN_USERNAME and verify_password(password, settings.ADMIN_PASSWORD):
         db = get_db()
         sessions_ref = db.collection('Sessions')
         admin_id = 'ADMIN_USER'
