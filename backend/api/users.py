@@ -45,7 +45,7 @@ async def bind_user(bind_data: UserBind, current_user: dict = Depends(deps.get_c
     users_ref = db.collection('Users')
     users_ref.document(current_user['LineId']).update({
         'MemberId': bind_data.member_id,
-        'MemberName': member_info.get('Name'), # Store the masked name from Members
+        'MemberName': bind_data.member_name, # Store the name provided by user for admin review
         'IsApproved': False,
         'ApplyDate': datetime.now()
     })

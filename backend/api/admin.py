@@ -340,6 +340,7 @@ async def get_members_list(admin: dict = Depends(deps.get_current_admin)):
             member_user_map[mid] = {
                 'LineId': u.id,
                 'LineName': ud.get('LineName', 'Unknown'),
+                'MemberName': ud.get('MemberName', ''), # Provided by user
                 'IsApproved': ud.get('IsApproved', False),
                 'ApplyDate': ud.get('ApplyDate')
             }
@@ -354,6 +355,7 @@ async def get_members_list(admin: dict = Depends(deps.get_current_admin)):
         user_info = member_user_map.get(m.id)
         if user_info:
             d['BoundUserName'] = user_info['LineName']
+            d['ProvidedName'] = user_info['MemberName'] # Name user typed in
             d['BoundLineId'] = user_info['LineId']
             d['IsApproved'] = user_info['IsApproved']
             d['ApplyDate'] = user_info['ApplyDate']
@@ -451,14 +453,19 @@ async def approve_member_binding(line_id: str, admin: dict = Depends(deps.get_cu
         
     user_data = user_doc.to_dict()
     member_id = user_data.get('MemberId')
+    raw_member_name = user_data.get('MemberName', '')
     
     if not member_id:
         raise HTTPException(status_code=400, detail="User has no pending binding")
         
+    # Apply Masking on Approval
+    masked_name = mask_name(raw_member_name)
+    
     # Update User
     now = datetime.now()
     user_ref.update({
         'IsApproved': True,
+        'MemberName': masked_name,
         'BindDate': now
     })
     

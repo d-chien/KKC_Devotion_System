@@ -12,7 +12,7 @@
 
 ## 資料庫設計
 - Users (使用者)
-    - {LineId: {MemberId: string, LineName: string, IsApproved: boolean, ApplyDate: Datetime, BindDate: Datetime}}
+    - {LineId: {MemberId: string, MemberName: string (審核後隱碼), LineName: string, IsApproved: boolean, ApplyDate: Datetime, BindDate: Datetime}}
 - Sessions (工作階段)
     - {MemberId: {SessionToken: string}}
 - Members (會友)

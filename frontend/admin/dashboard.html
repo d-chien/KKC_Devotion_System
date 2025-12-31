@@ -538,6 +538,7 @@
                 }
 
                 const applyDate = m.ApplyDate ? new Date(m.ApplyDate).toLocaleDateString() : '-';
+                const userDisplayName = m.ProvidedName ? `${m.BoundUserName} (${m.ProvidedName})` : (m.BoundUserName || '');
 
                 return `
                     <tr>
@@ -545,7 +546,7 @@
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${m.Name || '-'}</td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm">
                             ${statusBadge}
-                             ${m.BoundUserName ? `<span class="text-xs text-gray-500 ml-2">(${m.BoundUserName})</span>` : ''}
+                             ${userDisplayName ? `<span class="text-xs text-gray-500 ml-2">${userDisplayName}</span>` : ''}
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${applyDate}</td>
                          <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
