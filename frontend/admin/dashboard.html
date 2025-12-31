@@ -43,8 +43,12 @@
                             class="w-full text-left px-3 py-2 rounded-md hover:bg-gray-50 text-gray-700 tab-btn"
                             data-tab="upload">資料上傳</button></li>
                     <li><button onclick="switchTab('users')"
-                            class="w-full text-left px-3 py-2 rounded-md hover:bg-gray-50 text-gray-700 tab-btn"
-                            data-tab="users">會友管理</button></li>
+                            class="w-full text-left px-3 py-2 rounded-md hover:bg-gray-50 text-gray-700 tab-btn flex items-center justify-between"
+                            data-tab="users">
+                            <span>會友管理</span>
+                            <span id="badge-pending"
+                                class="hidden bg-red-500 text-white text-[10px] px-1.5 py-0.5 rounded-full">0</span>
+                        </button></li>
                     <li><button onclick="switchTab('categories')"
                             class="w-full text-left px-3 py-2 rounded-md hover:bg-gray-50 text-gray-700 tab-btn"
                             data-tab="categories">奉獻類別管理</button></li>
@@ -137,7 +141,9 @@
                                     </th>
                                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">會友姓名
                                     </th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">綁定狀態
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">狀態 /
+                                        LINE</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">申請日期
                                     </th>
                                     <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">操作</th>
                                 </tr>
@@ -279,9 +285,6 @@
         let categoryChart = null;
         async function loadDashboard() {
             try {
-                // We need an endpoint for admin dashboard stats.
-                // Assuming /api/admin/dashboard or similar. 
-                // Let's create it in backend first or assume it returns AdminDashboardData
                 const res = await fetch('/api/admin/dashboard', { credentials: 'include' });
                 if (!res.ok) throw new Error("Failed to load dashboard");
                 const data = await res.json();
@@ -290,6 +293,23 @@
                 document.getElementById('dash-total-count').textContent = `${data.total_count || 0} 筆`;
 
                 renderChart(data.category_distribution);
+
+                // Update Badge
+                const badge = document.getElementById('badge-pending');
+                if (data.pending_approvals_count > 0) {
+                    badge.textContent = data.pending_approvals_count;
+                    badge.classList.remove('hidden');
+
+                    // Optional: Show alert if just logged in (sessionStorage to prevent repeat)
+                    if (!sessionStorage.getItem('notified_pending')) {
+                        if (confirm(`尚有 ${data.pending_approvals_count} 筆會員綁定申請待審核，是否立即前往處理？`)) {
+                            switchTab('users');
+                        }
+                        sessionStorage.setItem('notified_pending', 'true');
+                    }
+                } else {
+                    badge.classList.add('hidden');
+                }
 
             } catch (e) {
                 console.error(e);
@@ -428,7 +448,7 @@
 
             if (type === 'devotions') {
                 instructionEl.innerHTML = `
-                    <strong>必填欄位：</strong> DevotionDate,CategoryId,CategoryName,MemberName,MemberId,Amount
+                    <strong>必填欄位：</strong> DevotionDate,CategoryId,CategoryName,MemberId,Amount
                     <br><span class="text-xs opacity-75">* 奉獻明細會直接新增至現有紀錄中。</span>
                 `;
             } else if (type === 'members') {
@@ -500,21 +520,68 @@
 
         function renderMembers(members) {
             const tbody = document.getElementById('user-list');
-            tbody.innerHTML = members.map(m => `
+            tbody.innerHTML = members.map(m => {
+                let statusBadge = '';
+                let actions = `<button class="text-indigo-600 hover:text-indigo-900" onclick="viewUser('${m.id}')">管理</button>`;
+
+                if (m.IsApproved === false) {
+                    statusBadge = `<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">待審核</span>`;
+                    actions = `
+                        <button class="text-green-600 hover:text-green-900 mr-2" onclick="approveBinding('${m.BoundLineId}')">通過</button>
+                        <button class="text-red-600 hover:text-red-900 mr-2" onclick="rejectBinding('${m.BoundLineId}')">駁回</button>
+                        ${actions}
+                    `;
+                } else if (m.isBind) {
+                    statusBadge = `<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">已綁定</span>`;
+                } else {
+                    statusBadge = `<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">未綁定</span>`;
+                }
+
+                const applyDate = m.ApplyDate ? new Date(m.ApplyDate).toLocaleDateString() : '-';
+
+                return `
                     <tr>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${m.id}</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${m.Name || m.MemberName || '-'}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-mono">${m.id}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${m.Name || '-'}</td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm">
-                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${m.isBind ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}">
-                                ${m.isBind ? '已綁定' : '未綁定'}
-                            </span>
+                            ${statusBadge}
                              ${m.BoundUserName ? `<span class="text-xs text-gray-500 ml-2">(${m.BoundUserName})</span>` : ''}
                         </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${applyDate}</td>
                          <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                            <button class="text-indigo-600 hover:text-indigo-900" onclick="viewUser('${m.id}')">管理</button>
+                            ${actions}
                         </td>
                     </tr>
-                `).join('');
+                `;
+            }).join('');
+        }
+
+        async function approveBinding(lineId) {
+            if (!confirm('是否通過此綁定申請？')) return;
+            try {
+                const res = await fetch(`/api/admin/members/approve/${lineId}`, { method: 'POST', credentials: 'include' });
+                if (res.ok) {
+                    alert('已通過');
+                    loadUsers();
+                    loadDashboard(); // Refresh badge
+                } else {
+                    alert('操作失敗');
+                }
+            } catch (e) { alert('系統錯誤'); }
+        }
+
+        async function rejectBinding(lineId) {
+            if (!confirm('是否駁回此綁定申請？')) return;
+            try {
+                const res = await fetch(`/api/admin/members/reject/${lineId}`, { method: 'POST', credentials: 'include' });
+                if (res.ok) {
+                    alert('已駁回');
+                    loadUsers();
+                    loadDashboard(); // Refresh badge
+                } else {
+                    alert('操作失敗');
+                }
+            } catch (e) { alert('系統錯誤'); }
         }
 
         function filterMembers() {

@@ -12,13 +12,13 @@
 
 ## 資料庫設計
 - Users (使用者)
-    - {LineId: {MemberId: string, MemberName: string, LineName: string, BindDate: Datetime}}
+    - {LineId: {MemberId: string, LineName: string, IsApproved: boolean, ApplyDate: Datetime, BindDate: Datetime}}
 - Sessions (工作階段)
     - {MemberId: {SessionToken: string}}
 - Members (會友)
-    - {MemberId: {MemberName: string, BindDate: Datetime, isBind: boolean}}
+    - {MemberId: {Name: string (已隱碼), BindDate: Datetime, isBind: boolean}}
 - Devotions (奉獻明細)
-    - {DevotionId: {MemberId: string, MemberName: string, CategoryId: string, Amount: number, DevotionDate: Datetime}}
+    - {DevotionId: {MemberId: string, CategoryId: string, Amount: number, DevotionDate: Datetime}}
 - Categories (奉獻類別)
     - {CategoryId: {CategoryName: string, Type: string}}
 - AuditLogs (稽核日誌)

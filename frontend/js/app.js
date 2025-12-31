@@ -35,7 +35,9 @@ async function checkAuth() {
         userData = await res.json();
         logger.debug("User data loaded", userData);
 
-        if (!userData.IsBound) {
+        if (userData.MemberId && !userData.IsApproved) {
+            showPendingStatus();
+        } else if (!userData.IsBound) {
             showBindModal();
         } else {
             showDashboard();
@@ -62,10 +64,32 @@ function showDashboard() {
 }
 
 function showBindModal() {
-    // Show Dashboard background but with Modal
-    // But actually simpler to just show modal
     document.getElementById('login-view').classList.add('hidden');
-    document.getElementById('dashboard-view').classList.remove('hidden'); // Navbar visible
+    document.getElementById('dashboard-view').classList.remove('hidden');
+    document.getElementById('bind-modal').classList.remove('hidden');
+}
+
+function showPendingStatus() {
+    document.getElementById('login-view').classList.add('hidden');
+    document.getElementById('dashboard-view').classList.remove('hidden');
+
+    // Replace modal content with pending message
+    const modalContent = document.querySelector('#bind-modal .bg-white');
+    if (modalContent) {
+        modalContent.innerHTML = `
+            <div class="p-8 text-center">
+                <div class="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <svg class="w-8 h-8 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                </div>
+                <h3 class="text-xl font-bold text-gray-900 mb-2">綁定申請中</h3>
+                <p class="text-gray-500">您的申請已送出，請靜待管理員審核通過。</p>
+                <p class="text-sm text-gray-400 mt-4">申請日期：${userData.ApplyDate ? new Date(userData.ApplyDate).toLocaleDateString() : '今日'}</p>
+                <button onclick="location.reload()" class="mt-6 w-full py-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200">重新整理</button>
+            </div>
+        `;
+    }
     document.getElementById('bind-modal').classList.remove('hidden');
 }
 
@@ -98,9 +122,16 @@ async function submitBind() {
             return;
         }
 
-        logger.info("Binding successful");
+        const data = await res.json();
+        logger.info("Binding response", data);
+
+        if (data.status === 'pending') {
+            alert(data.message || "綁定申請中");
+        } else {
+            logger.info("Binding successful");
+        }
+
         document.getElementById('bind-modal').classList.add('hidden');
-        // Reload or update state
         location.reload();
 
     } catch (e) {

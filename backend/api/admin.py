@@ -10,25 +10,23 @@ from backend.core.audit import record_audit_log
 
 router = APIRouter()
 
+# --- Helpers ---
+def mask_name(name: str) -> str:
+    if not name or not isinstance(name, str):
+        return name
+    name = name.strip()
+    if len(name) == 2:
+        return name[0] + "O"
+    elif len(name) >= 3:
+        return name[0] + "O" * (len(name) - 2) + name[-1]
+    return name
+
 # --- Dashboard Stats ---
 @router.get("/dashboard")
 async def get_admin_dashboard_stats(admin: dict = Depends(deps.get_current_admin)):
     db = get_db()
     
-    # 1. Get Total Count using Aggregation Query (Efficient)
-    # Note: aggregation_query is available in newer google-cloud-firestore
-    # If not available in current env, fallback to count loop, but let's try standard way.
-    # Actually, standard python client supports collection_group query count, or collection count.
-    
-    # Simple count query
-    # collection_ref = db.collection('Devotions')
-    # count_query = collection_ref.count()
-    # count_snapshot = count_query.get()
-    # total_count = count_snapshot[0][0].value 
-    
-    # However, 'count()' is in newer library versions. Let's stick to safe optimization: Projection.
-    # We only need Amount and Category for stats.
-    
+    # 1. Devotion Stats
     devotions = db.collection('Devotions').select(['Amount', 'CategoryName', 'CategoryId']).stream()
     
     total_amount = 0
@@ -36,22 +34,27 @@ async def get_admin_dashboard_stats(admin: dict = Depends(deps.get_current_admin
     cat_dist = {}
     
     for d in devotions:
-        # data is partial dict due to select
         data = d.to_dict()
         amt = data.get('Amount', 0)
-        # Use CategoryName preferred, fallback to ID
         cat = data.get('CategoryName') or data.get('CategoryId') or 'Unknown'
         
         total_amount += amt
         count += 1
         cat_dist[cat] = cat_dist.get(cat, 0) + amt
         
-    logger.debug(f"Admin dashboard loaded: {count} items, total {total_amount}")
+    # 2. Pending Approvals count
+    pending_count = 0
+    pending_users = db.collection('Users').where('IsApproved', '==', False).where('MemberId', '!=', None).stream()
+    for _ in pending_users:
+        pending_count += 1
+        
+    logger.debug(f"Admin dashboard loaded: {count} items, {pending_count} pending approvals")
     
     return {
         "total_amount_all": total_amount,
         "total_count": count,
-        "category_distribution": cat_dist
+        "category_distribution": cat_dist,
+        "pending_approvals_count": pending_count
     }
 
 # --- Upload ---
@@ -75,8 +78,8 @@ async def upload_devotions(file: UploadFile = File(...), admin: dict = Depends(d
     except Exception as e:
          raise HTTPException(status_code=400, detail=f"Error reading file: {str(e)}")
          
-    # Expected columns: Date, Category, Amount, MemberId, MemberName
-    required_cols = ['DevotionDate', 'CategoryId','CategoryName','MemberName','MemberId', 'Amount']
+    # Expected columns: Date, Category, Amount, MemberId
+    required_cols = ['DevotionDate', 'CategoryId','CategoryName','MemberId', 'Amount']
     if not all(col in df.columns for col in required_cols):
         raise HTTPException(status_code=400, detail=f"Missing columns. Required: {required_cols}")
         
@@ -86,9 +89,6 @@ async def upload_devotions(file: UploadFile = File(...), admin: dict = Depends(d
     
     count = 0
     errors = []
-    
-    # Pre-fetch categories map to ID? Or just store Name?
-    # Spec says "Category Id", "Category Name".
     
     for index, row in df.iterrows():
         try:
@@ -105,8 +105,7 @@ async def upload_devotions(file: UploadFile = File(...), admin: dict = Depends(d
 
             data = {
                 'MemberId': str(row['MemberId']),
-                'MemberName': row.get('MemberName', ''),
-                'CategoryId': str(row['CategoryId']), # Using Name as ID for simplicity or lookup
+                'CategoryId': str(row['CategoryId']), 
                 'CategoryName': str(row['CategoryName']),
                 'Amount': int(row['Amount']),
                 'DevotionDate': dev_date,
@@ -174,8 +173,6 @@ async def upload_members(file: UploadFile = File(...), admin: dict = Depends(dep
             }
             
     # 2. Delete all current members (Full Replace)
-    # Note: For small scale, we can just delete. 
-    # For large scale, we should use chunks.
     docs = db.collection('Members').list_documents()
     batch = db.batch()
     d_count = 0
@@ -192,11 +189,14 @@ async def upload_members(file: UploadFile = File(...), admin: dict = Depends(dep
     batch = db.batch()
     count = 0
     for _, row in df.iterrows():
-        mid = str(row['MemberId'])
-        name = str(row['Name'])
+        mid = str(row['MemberId']).strip()
+        name = str(row['Name']).strip()
+        
+        # Apply Masking
+        masked_name = mask_name(name)
         
         data = {
-            'Name': name,
+            'Name': masked_name,
             'isBind': binding_map.get(mid, {}).get('isBind', False),
             'BindDate': binding_map.get(mid, {}).get('BindDate', None)
         }
@@ -328,17 +328,21 @@ async def get_members_list(admin: dict = Depends(deps.get_current_admin)):
     # List all members from Members collection
     members = db.collection('Members').stream()
     
-    # Optimize: Fetch all Users who are bound to map MemberId -> LineName
-    # This avoids N+1 queries.
+    # Fetch all Users who have a MemberId (pending or approved)
     users = db.collection('Users').where('MemberId', '!=', None).stream()
     
-    # Create mapping: MemberId -> LineName
+    # Create mapping: MemberId -> {LineId, LineName, IsApproved, ApplyDate}
     member_user_map = {}
     for u in users:
         ud = u.to_dict()
         mid = ud.get('MemberId')
         if mid:
-            member_user_map[mid] = ud.get('LineName', 'Unknown')
+            member_user_map[mid] = {
+                'LineId': u.id,
+                'LineName': ud.get('LineName', 'Unknown'),
+                'IsApproved': ud.get('IsApproved', False),
+                'ApplyDate': ud.get('ApplyDate')
+            }
 
     result = []
     
@@ -346,9 +350,15 @@ async def get_members_list(admin: dict = Depends(deps.get_current_admin)):
         d = m.to_dict()
         d['id'] = m.id 
         
-        # Attach BoundUserName if bound
-        if d.get('isBind'):
-            d['BoundUserName'] = member_user_map.get(m.id)
+        # Attach User info if there's a record matching this MemberId
+        user_info = member_user_map.get(m.id)
+        if user_info:
+            d['BoundUserName'] = user_info['LineName']
+            d['BoundLineId'] = user_info['LineId']
+            d['IsApproved'] = user_info['IsApproved']
+            d['ApplyDate'] = user_info['ApplyDate']
+        else:
+            d['IsApproved'] = None # No one applied
             
         result.append(d)
         
@@ -427,6 +437,67 @@ async def update_member(member_id: str, update_data: UserUpdate):
         details={"is_unbind": update_data.is_unbind, "member_name": update_data.member_name}
     )
 
+    return {"status": "success"}
+
+# --- Binding Approvals ---
+@router.post("/members/approve/{line_id}")
+async def approve_member_binding(line_id: str, admin: dict = Depends(deps.get_current_admin)):
+    db = get_db()
+    user_ref = db.collection('Users').document(line_id)
+    user_doc = user_ref.get()
+    
+    if not user_doc.exists:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    user_data = user_doc.to_dict()
+    member_id = user_data.get('MemberId')
+    
+    if not member_id:
+        raise HTTPException(status_code=400, detail="User has no pending binding")
+        
+    # Update User
+    now = datetime.now()
+    user_ref.update({
+        'IsApproved': True,
+        'BindDate': now
+    })
+    
+    # Update Member
+    db.collection('Members').document(member_id).update({
+        'isBind': True,
+        'BindDate': now
+    })
+    
+    logger.info(f"Binding approved for User {line_id} -> Member {member_id}")
+    record_audit_log("Admin", "ADMIN", "APPROVE_BINDING", target_id=line_id, details={"member_id": member_id})
+    
+    return {"status": "success"}
+
+@router.post("/members/reject/{line_id}")
+async def reject_member_binding(line_id: str, admin: dict = Depends(deps.get_current_admin)):
+    db = get_db()
+    user_ref = db.collection('Users').document(line_id)
+    user_doc = user_ref.get()
+    
+    if not user_doc.exists:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    user_data = user_doc.to_dict()
+    member_id = user_data.get('MemberId')
+    
+    # Clear binding info from User
+    user_ref.update({
+        'MemberId': None,
+        'MemberName': None,
+        'IsApproved': False,
+        'ApplyDate': None
+    })
+    
+    # Member collection doesn't need update because we didn't set isBind=True yet
+    
+    logger.info(f"Binding rejected for User {line_id}")
+    record_audit_log("Admin", "ADMIN", "REJECT_BINDING", target_id=line_id, details={"member_id": member_id})
+    
     return {"status": "success"}
 
 # Additional admin mgmt endpoints here...

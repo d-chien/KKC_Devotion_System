@@ -16,14 +16,20 @@ async def get_me(current_user: dict = Depends(deps.get_current_user)):
         "LineId": current_user.get('LineId'),
         "LineName": current_user.get('LineName'),
         "MemberId": current_user.get('MemberId'),
-        "MemberName": current_user.get('MemberName'),
-        "IsBound": bool(current_user.get('MemberId'))
+        "IsBound": bool(current_user.get('MemberId') and current_user.get('IsApproved')),
+        "IsApproved": current_user.get('IsApproved', False),
+        "ApplyDate": current_user.get('ApplyDate')
     }
 
 @router.post('/bind')
 async def bind_user(bind_data: UserBind, current_user: dict = Depends(deps.get_current_user)):
     db = get_db()
-    # Check if MemberId is valid in Members collection
+    
+    # 1. Check if user already bound or pending
+    if current_user.get('MemberId') and current_user.get('IsApproved'):
+        raise HTTPException(status_code=400, detail="User already bound")
+    
+    # 2. Check if MemberId exists in Members collection
     members_ref = db.collection('Members')
     member_doc = members_ref.document(bind_data.member_id).get()
     
@@ -31,41 +37,39 @@ async def bind_user(bind_data: UserBind, current_user: dict = Depends(deps.get_c
         raise HTTPException(status_code=400, detail="Member ID not found")
     
     member_info = member_doc.to_dict()
-    # Optional: Check name matches or something
     
     if member_info.get('isBind'):
-         raise HTTPException(status_code=400, detail="Member ID already bound")
+         raise HTTPException(status_code=400, detail="Member ID already bound by another user")
          
-    # Update User
+    # 3. Update User with application info
     users_ref = db.collection('Users')
     users_ref.document(current_user['LineId']).update({
         'MemberId': bind_data.member_id,
-        'MemberName': bind_data.member_name, # or use name from DB
-        'BindDate': datetime.now()
+        'MemberName': member_info.get('Name'), # Store the masked name from Members
+        'IsApproved': False,
+        'ApplyDate': datetime.now()
     })
     
-    # Update Member
-    members_ref.document(bind_data.member_id).update({
-        'isBind': True
-    })
+    # We DON'T update Members.isBind here, only after approval.
     
-    logger.info(f"User {current_user['LineId']} bound to Member {bind_data.member_id}")
+    logger.info(f"User {current_user['LineId'][:10]} applied for Member {bind_data.member_id}")
     
     record_audit_log(
         operator_type="User",
         operator_id=current_user['LineId'],
-        action="BIND_MEMBER",
+        action="APPLY_BIND",
         target_id=bind_data.member_id,
-        details={"member_name": bind_data.member_name}
+        details={"member_name": member_info.get('Name')}
     )
     
-    return {"status": "success"}
+    return {"status": "pending", "message": "綁定申請中"}
 
 @router.get('/dashboard')
 async def get_dashboard(current_user: dict = Depends(deps.get_current_user)):
     member_id = current_user.get('MemberId')
-    if not member_id:
-        raise HTTPException(status_code=403, detail="User not bound")
+    is_approved = current_user.get('IsApproved', False)
+    if not member_id or not is_approved:
+        raise HTTPException(status_code=403, detail="User not bound or not yet approved")
         
     db = get_db()
     
