@@ -232,7 +232,10 @@ function renderCharts() {
         dateMap[date] = (dateMap[date] || 0) + d.Amount;
     });
 
-    const sortedDates = Object.keys(dateMap).sort(); // Basic sort
+    // const sortedDates = Object.keys(dateMap).sort(); // Basic sort
+    const sortedDates = Object.keys(dateMap).sort((a, b) => {
+        return new Date(a) - new Date(b);
+    });
 
     const ctxBar = document.getElementById('historyChart').getContext('2d');
     new Chart(ctxBar, {
@@ -244,6 +247,12 @@ function renderCharts() {
                 data: sortedDates.map(d => dateMap[d]),
                 backgroundColor: '#6366F1'
             }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: { beginAtZero: true }
+            }
         }
     });
 }
