@@ -189,14 +189,17 @@ function renderDashboard() {
         `).join('');
 
         return `
-            <tr onclick="toggleMonth('${monthKey}')" class="cursor-pointer hover:bg-indigo-50 transition-colors bg-white">
-                <td colspan="2" class="px-6 py-4 whitespace-nowrap text-sm font-bold text-indigo-600 flex items-center">
+            <tr onclick="toggleMonth('${monthKey}')" class="cursor-pointer hover:bg-indigo-100 transition-colors bg-indigo-50/30">
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-indigo-700 flex items-center">
                     <svg id="chevron-${monthKey}" class="w-4 h-4 mr-2 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
                     </svg>
                     ${group.label}
                 </td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-indigo-600 text-right">
+                <td class="px-6 py-4 whitespace-nowrap text-xs font-medium text-indigo-600/70">
+                    月分小計
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-indigo-700 text-right">
                     ${group.total.toLocaleString()}
                 </td>
             </tr>
