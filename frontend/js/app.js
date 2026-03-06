@@ -159,18 +159,66 @@ function renderDashboard() {
 
     document.getElementById('total-count').textContent = dashboardData.total_count;
 
-    // List
+    // List grouping by month
     const listEl = document.getElementById('devotion-list');
-    listEl.innerHTML = dashboardData.recent_devotions.map(d => `
-        <tr>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${new Date(d.DevotionDate).toLocaleDateString()}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${d.CategoryName || d.CategoryId}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-right">${d.Amount.toLocaleString()}</td>
-        </tr>
-    `).join('');
+    const groups = {};
+    dashboardData.recent_devotions.forEach(d => {
+        const date = new Date(d.DevotionDate);
+        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        if (!groups[monthKey]) {
+            groups[monthKey] = {
+                label: `${date.getFullYear()}年${date.getMonth() + 1}月`,
+                total: 0,
+                items: []
+            };
+        }
+        groups[monthKey].total += d.Amount;
+        groups[monthKey].items.push(d);
+    });
+
+    const sortedMonthKeys = Object.keys(groups).sort().reverse();
+
+    listEl.innerHTML = sortedMonthKeys.map(monthKey => {
+        const group = groups[monthKey];
+        const detailRows = group.items.map(d => `
+            <tr class="month-details-${monthKey} hidden bg-gray-50/50">
+                <td class="px-6 py-3 whitespace-nowrap text-xs text-gray-500 pl-12">${new Date(d.DevotionDate).toLocaleDateString()}</td>
+                <td class="px-6 py-3 whitespace-nowrap text-xs text-gray-900">${d.CategoryName || d.CategoryId}</td>
+                <td class="px-6 py-3 whitespace-nowrap text-xs text-gray-500 text-right">${d.Amount.toLocaleString()}</td>
+            </tr>
+        `).join('');
+
+        return `
+            <tr onclick="toggleMonth('${monthKey}')" class="cursor-pointer hover:bg-indigo-50 transition-colors bg-white">
+                <td colspan="2" class="px-6 py-4 whitespace-nowrap text-sm font-bold text-indigo-600 flex items-center">
+                    <svg id="chevron-${monthKey}" class="w-4 h-4 mr-2 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                    </svg>
+                    ${group.label}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-indigo-600 text-right">
+                    ${group.total.toLocaleString()}
+                </td>
+            </tr>
+            ${detailRows}
+        `;
+    }).join('');
 
     // Charts
     renderCharts();
+}
+
+function toggleMonth(monthKey) {
+    const details = document.querySelectorAll(`.month-details-${monthKey}`);
+    const chevron = document.getElementById(`chevron-${monthKey}`);
+
+    details.forEach(el => {
+        el.classList.toggle('hidden');
+    });
+
+    if (chevron) {
+        chevron.classList.toggle('rotate-90');
+    }
 }
 
 function toggleAmount() {
