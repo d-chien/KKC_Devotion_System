@@ -68,10 +68,25 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Deploy to Firebase Hosting
-        uses: FirebaseExtended/action-hosting-deploy@v0.11.0
+      - name: Google Auth
+        uses: google-github-actions/auth@v2
         with:
-          repoToken: '${{ secrets.GITHUB_TOKEN }}'
-          firebaseServiceAccount: '${{ secrets.GCP_CREDENTIALS }}'
-          channelId: live
-          projectId: ${{ secrets.GCP_PROJECT_ID }}
+          credentials_json: '${{ secrets.GCP_CREDENTIALS }}'
+
+      - name: Deploy to Firebase Hosting
+        run: |
+          output=$(npx firebase-tools@latest deploy --only hosting \
+            --project ${{ secrets.GCP_PROJECT_ID }} --json 2>&1) || true
+
+          if echo "$output" | grep -q "already active version"; then
+            echo "Content unchanged — already at current version, skipping release."
+            exit 0
+          fi
+
+          if echo "$output" | grep -q '"status":"error"'; then
+            echo "Firebase deploy failed:"
+            echo "$output"
+            exit 1
+          fi
+
+          echo "Firebase Hosting deployed successfully."
