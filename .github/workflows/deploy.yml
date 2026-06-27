@@ -4,10 +4,8 @@ on:
   push:
     branches:
       - main
-    paths:
-      - 'frontend/**'
-      - 'backend/**'
-      - 'Dockerfile'
+    paths-ignore:
+      - 'README.md'
 
 env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
@@ -15,28 +13,8 @@ env:
   SERVICE_NAME: devotion-system
 
 jobs:
-  # Detect which paths changed
-  changes:
-    runs-on: ubuntu-latest
-    outputs:
-      frontend: ${{ steps.filter.outputs.frontend }}
-      backend: ${{ steps.filter.outputs.backend }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v3
-        id: filter
-        with:
-          filters: |
-            frontend:
-              - 'frontend/**'
-            backend:
-              - 'backend/**'
-              - 'Dockerfile'
-
   # 1. Deploy Backend to Cloud Run
   deploy-backend:
-    needs: changes
-    if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -51,6 +29,7 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
 
       - name: Deploy to Cloud Run
+        # This builds the source (Dockerfile) and deploys it
         run: |
           gcloud run deploy ${{ env.SERVICE_NAME }} \
             --source . \
@@ -61,32 +40,16 @@ jobs:
 
   # 2. Deploy Frontend to Firebase Hosting
   deploy-frontend:
-    needs: changes
-    if: needs.changes.outputs.frontend == 'true'
+    needs: deploy-backend
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Google Auth
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: '${{ secrets.GCP_CREDENTIALS }}'
-
       - name: Deploy to Firebase Hosting
-        run: |
-          output=$(npx firebase-tools@latest deploy --only hosting \
-            --project ${{ secrets.GCP_PROJECT_ID }} --json 2>&1) || true
-
-          if echo "$output" | grep -q "already active version"; then
-            echo "Content unchanged — already at current version, skipping release."
-            exit 0
-          fi
-
-          if echo "$output" | grep -q '"status":"error"'; then
-            echo "Firebase deploy failed:"
-            echo "$output"
-            exit 1
-          fi
-
-          echo "Firebase Hosting deployed successfully."
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: '${{ secrets.GITHUB_TOKEN }}'
+          firebaseServiceAccount: '${{ secrets.GCP_CREDENTIALS }}'
+          channelId: live
+          projectId: ${{ secrets.GCP_PROJECT_ID }}
