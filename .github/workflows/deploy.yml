@@ -5,7 +5,10 @@ on:
     branches:
       - main
     paths-ignore:
-      - 'README.md'
+      - '*.md'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.gitignore'
 
 env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
