@@ -4,11 +4,10 @@ on:
   push:
     branches:
       - main
-    paths-ignore:
-      - '*.md'
-      - 'package.json'
-      - 'package-lock.json'
-      - '.gitignore'
+    paths:
+      - 'frontend/**'
+      - 'backend/**'
+      - 'Dockerfile'
 
 env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
@@ -16,8 +15,28 @@ env:
   SERVICE_NAME: devotion-system
 
 jobs:
+  # Detect which paths changed
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      frontend: ${{ steps.filter.outputs.frontend }}
+      backend: ${{ steps.filter.outputs.backend }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            frontend:
+              - 'frontend/**'
+            backend:
+              - 'backend/**'
+              - 'Dockerfile'
+
   # 1. Deploy Backend to Cloud Run
   deploy-backend:
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -32,7 +51,6 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
 
       - name: Deploy to Cloud Run
-        # This builds the source (Dockerfile) and deploys it
         run: |
           gcloud run deploy ${{ env.SERVICE_NAME }} \
             --source . \
@@ -43,7 +61,8 @@ jobs:
 
   # 2. Deploy Frontend to Firebase Hosting
   deploy-frontend:
-    needs: deploy-backend
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
