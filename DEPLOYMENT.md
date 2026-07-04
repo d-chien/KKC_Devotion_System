@@ -85,11 +85,12 @@ on:
       - main
     paths-ignore:
       - 'README.md'
+  workflow_dispatch:
 
 env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
   REGION: asia-east1
-  SERVICE_NAME: kkc-devotion-system
+  SERVICE_NAME: devotion-system
 
 jobs:
   # 1. Deploy Backend to Cloud Run
@@ -125,14 +126,32 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Deploy to Firebase Hosting
-        uses: FirebaseExtended/action-hosting-deploy@v0
+      - name: Google Auth
+        uses: google-github-actions/auth@v2
         with:
-          repoToken: '${{ secrets.GITHUB_TOKEN }}'
-          firebaseServiceAccount: '${{ secrets.GCP_CREDENTIALS }}'
-          channelId: live
-          projectId: ${{ secrets.GCP_PROJECT_ID }}
+          credentials_json: '${{ secrets.GCP_CREDENTIALS }}'
+
+      - name: Deploy to Firebase Hosting
+        run: |
+          set -o pipefail
+          if npx firebase-tools@latest deploy --only hosting \
+               --project "${{ secrets.GCP_PROJECT_ID }}" 2>&1 | tee deploy.log; then
+            echo "Firebase Hosting deployed successfully."
+          elif grep -q "is the current active version" deploy.log; then
+            echo "Release already applied — treating as success."
+          else
+            echo "Firebase deploy failed."
+            exit 1
+          fi
 ```
+
+> **Note**: The frontend deploy intentionally uses `firebase-tools` directly
+> (not `FirebaseExtended/action-hosting-deploy`). The action bundles an older
+> CLI that, on Node 24 runners, retries the hosting release POST after a
+> spurious "premature close" and then fails with
+> `400 FAILED_PRECONDITION: ... is the current active version` even though the
+> deploy succeeded. Recent firebase-tools disables keep-alive to avoid this,
+> and the workflow additionally treats that specific error as success.
 
 ## Step 5: Verification
 
