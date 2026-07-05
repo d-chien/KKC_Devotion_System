@@ -1,25 +1,23 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends
 from backend.api import deps
 from backend.core.database import get_db
 import pandas as pd
 import io
+import json
 from datetime import datetime
 from backend.schemas import Category, UserUpdate
 from backend.core.logger import logger
 from backend.core.audit import record_audit_log
+from backend.core.member_import import (
+    mask_name,
+    name_hash,
+    analyze_members,
+    apply_resolutions,
+    MemberImportError,
+    UnresolvedConflictsError,
+)
 
 router = APIRouter()
-
-# --- Helpers ---
-def mask_name(name: str) -> str:
-    if not name or not isinstance(name, str):
-        return name
-    name = name.strip()
-    if len(name) == 2:
-        return name[0] + "O"
-    elif len(name) >= 3:
-        return name[0] + "O" * (len(name) - 2) + name[-1]
-    return name
 
 # --- Dashboard Stats ---
 @router.get("/dashboard")
@@ -141,37 +139,120 @@ async def upload_devotions(file: UploadFile = File(...), admin: dict = Depends(d
     
     return {"status": "success", "processed": len(df)}
 
-@router.post("/upload/members")
-async def upload_members(file: UploadFile = File(...), admin: dict = Depends(deps.get_current_admin)):
-    if not file.filename.endswith(('.xlsx', '.csv')):
-        raise HTTPException(status_code=400, detail="Invalid file type")
-    
-    contents = await file.read()
+def _read_member_file_rows(filename: str, contents: bytes):
+    """Parse the uploaded member file into [{'member_id', 'name'}]."""
     try:
-        if file.filename.endswith('.csv'):
-            df = pd.read_csv(io.BytesIO(contents), dtype = str)
+        if filename.endswith('.csv'):
+            df = pd.read_csv(io.BytesIO(contents), dtype=str)
         else:
-            df = pd.read_excel(io.BytesIO(contents))
+            df = pd.read_excel(io.BytesIO(contents), dtype=str)
     except Exception as e:
-         raise HTTPException(status_code=400, detail=f"Error reading file: {str(e)}")
-         
+        raise HTTPException(status_code=400, detail=f"Error reading file: {str(e)}")
+
     # Expected columns for Members: MemberId, Name
     if 'MemberId' not in df.columns or 'Name' not in df.columns:
         raise HTTPException(status_code=400, detail="Missing columns. Required: ['MemberId', 'Name']")
-        
-    db = get_db()
-    
-    # 1. Backup current binding status to preserve it
-    current_members = db.collection('Members').stream()
-    binding_map = {} # MemberId -> {isBind, BindDate}
-    for m in current_members:
+
+    rows = []
+    for _, row in df.iterrows():
+        mid = '' if pd.isna(row['MemberId']) else str(row['MemberId']).strip()
+        name = '' if pd.isna(row['Name']) else str(row['Name']).strip()
+        rows.append({'member_id': mid, 'name': name})
+    return rows
+
+def _load_existing_members(db):
+    members = []
+    for m in db.collection('Members').stream():
         d = m.to_dict()
-        if d.get('isBind'):
-            binding_map[m.id] = {
-                'isBind': True,
-                'BindDate': d.get('BindDate')
-            }
-            
+        members.append({
+            'member_id': m.id,
+            'masked_name': d.get('Name'),
+            'name_hash': d.get('NameHash'),
+            'is_bind': bool(d.get('isBind')),
+            'bind_date': d.get('BindDate'),
+        })
+    return members
+
+def _plan_summary(plan):
+    renumbered = [u for u in plan['updates'] if u['old_id'] != u['new_id']]
+    return {
+        "updates": plan['updates'],
+        "creates": plan['creates'],
+        "deletes": plan['deletes'],
+        "conflicts": plan.get('conflicts', []),
+        "renumbered_count": len(renumbered),
+        "bound_deletes": [d for d in plan['deletes'] if d['is_bind']],
+    }
+
+@router.post("/upload/members/analyze")
+async def analyze_members_upload(file: UploadFile = File(...), admin: dict = Depends(deps.get_current_admin)):
+    """Dry-run: classify the uploaded roster against existing members without writing."""
+    if not file.filename.endswith(('.xlsx', '.csv')):
+        raise HTTPException(status_code=400, detail="Invalid file type")
+
+    contents = await file.read()
+    rows = _read_member_file_rows(file.filename, contents)
+    existing = _load_existing_members(get_db())
+
+    try:
+        plan = analyze_members(rows, existing)
+    except MemberImportError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    return {"status": "preview", **_plan_summary(plan)}
+
+@router.post("/upload/members")
+async def upload_members(
+    file: UploadFile = File(...),
+    resolutions: str = Form(None),
+    admin: dict = Depends(deps.get_current_admin),
+):
+    """Full-replace member upload keyed on name identity.
+
+    Rows whose name matches exactly one existing member update that member's
+    number; bindings (Users.MemberId) and devotion history
+    (Devotions.MemberId) follow the member to the new number. Same-name
+    ambiguities must be resolved via the `resolutions` form field (JSON from
+    the /upload/members/analyze confirmation flow), otherwise 409.
+    """
+    if not file.filename.endswith(('.xlsx', '.csv')):
+        raise HTTPException(status_code=400, detail="Invalid file type")
+
+    contents = await file.read()
+    rows = _read_member_file_rows(file.filename, contents)
+
+    try:
+        resolutions_map = json.loads(resolutions) if resolutions else {}
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid resolutions JSON")
+
+    db = get_db()
+    existing = _load_existing_members(db)
+
+    try:
+        plan = analyze_members(rows, existing)
+        final = apply_resolutions(plan, resolutions_map, existing)
+    except UnresolvedConflictsError as e:
+        raise HTTPException(status_code=409, detail={
+            "status": "needs_confirmation",
+            "conflicts": e.args[0],
+        })
+    except MemberImportError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    # old -> new number mapping; bindings and FK migrations follow it
+    mapping = {u['old_id']: u['new_id'] for u in final['updates']}
+    renumbered = {o: n for o, n in mapping.items() if o != n}
+    bind_by_old = {m['member_id']: m for m in existing if m['is_bind']}
+
+    # 1. Materialize FK doc refs BEFORE any update, so number swaps/chains
+    # (e.g. A:1->2, B:2->3) can't be migrated twice by re-querying.
+    fk_updates = []  # (doc_ref, new_id)
+    for old_id, new_id in renumbered.items():
+        for coll in ('Users', 'Devotions'):
+            for doc in db.collection(coll).where('MemberId', '==', old_id).stream():
+                fk_updates.append((doc.reference, new_id, coll))
+
     # 2. Delete all current members (Full Replace)
     docs = db.collection('Members').list_documents()
     batch = db.batch()
@@ -184,21 +265,25 @@ async def upload_members(file: UploadFile = File(...), admin: dict = Depends(dep
             batch = db.batch()
             d_count = 0
     batch.commit()
-    
-    # 3. Upload new members
+
+    # 3. Recreate members, carrying binding along the identity mapping
+    new_to_old = {u['new_id']: u['old_id'] for u in final['updates']}
     batch = db.batch()
     count = 0
-    for _, row in df.iterrows():
-        mid = str(row['MemberId']).strip()
-        name = str(row['Name']).strip()
-        
-        # Apply Masking
-        masked_name = mask_name(name)
-        
+    for r in rows:
+        mid, name = r['member_id'], r['name']
+        old_id = new_to_old.get(mid)
+        if old_id is None and mid in bind_by_old and mid not in mapping:
+            # Number reused by an unmatched row while the previous holder
+            # wasn't renumbered elsewhere: keep the legacy carry-by-number
+            # behavior so an id-stable member with a name typo stays bound.
+            old_id = mid
+        bind = bind_by_old.get(old_id) if old_id else None
         data = {
-            'Name': masked_name,
-            'isBind': binding_map.get(mid, {}).get('isBind', False),
-            'BindDate': binding_map.get(mid, {}).get('BindDate', None)
+            'Name': mask_name(name),
+            'NameHash': name_hash(name),
+            'isBind': bool(bind),
+            'BindDate': bind['bind_date'] if bind else None,
         }
         batch.set(db.collection('Members').document(mid), data)
         count += 1
@@ -207,11 +292,34 @@ async def upload_members(file: UploadFile = File(...), admin: dict = Depends(dep
             batch = db.batch()
             count = 0
     batch.commit()
-    
-    logger.info(f"Members full replace completed. {len(df)} records.")
-    record_audit_log("Admin", "ADMIN", "UPLOAD_MEMBERS_FULL_REPLACE", details={"records": len(df)})
-    
-    return {"status": "success", "processed": len(df)}
+
+    # 4. Migrate Users/Devotions foreign keys to the new numbers
+    batch = db.batch()
+    count = 0
+    migrated = {'Users': 0, 'Devotions': 0}
+    for doc_ref, new_id, coll in fk_updates:
+        batch.update(doc_ref, {'MemberId': new_id})
+        migrated[coll] += 1
+        count += 1
+        if count >= 400:
+            batch.commit()
+            batch = db.batch()
+            count = 0
+    batch.commit()
+
+    stats = {
+        "created": len(final['creates']),
+        "updated": len(final['updates']),
+        "renumbered": len(renumbered),
+        "deleted": len(final['deletes']),
+        "migrated_users": migrated['Users'],
+        "migrated_devotions": migrated['Devotions'],
+    }
+    logger.info(f"Members full replace completed. {len(rows)} records. {stats}")
+    record_audit_log("Admin", "ADMIN", "UPLOAD_MEMBERS_FULL_REPLACE",
+                     details={"records": len(rows), **stats})
+
+    return {"status": "success", "processed": len(rows), **stats}
 
 @router.post("/upload/categories")
 async def upload_categories(file: UploadFile = File(...), admin: dict = Depends(deps.get_current_admin)):

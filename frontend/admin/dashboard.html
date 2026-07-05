@@ -254,6 +254,22 @@
         </div>
     </div>
 
+    <!-- Member Upload Confirm Modal -->
+    <div id="member-upload-modal"
+        class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden overflow-y-auto h-full w-full flex items-center justify-center">
+        <div class="relative bg-white rounded-lg shadow-xl p-8 m-4 max-w-2xl w-full max-h-[85vh] overflow-y-auto">
+            <h3 class="text-xl font-semibold mb-4 text-gray-900">會友名單上傳確認</h3>
+            <div id="mu-summary" class="space-y-2 text-sm text-gray-700 mb-4"></div>
+            <div id="mu-conflicts" class="space-y-4"></div>
+            <div class="mt-6 flex justify-end space-x-3">
+                <button onclick="closeMemberUploadModal()"
+                    class="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300">取消</button>
+                <button onclick="confirmMemberUpload()"
+                    class="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700">確認上傳</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         // Logging Utility
         const logger = {
@@ -454,7 +470,9 @@
             } else if (type === 'members') {
                 instructionEl.innerHTML = `
                     <strong>必填欄位：</strong> MemberId,Name
-                    <br><span class="text-xs text-red-600">* 注意：這將會刪除所有現有會員資料並以此檔案取代。系統會嘗試保留已綁定的狀態。</span>
+                    <br><span class="text-xs opacity-75">* 上傳後會以「姓名」比對既有會友：同名者自動更新編號，綁定帳號與奉獻紀錄會跟著轉移到新編號。</span>
+                    <br><span class="text-xs opacity-75">* 有同名多筆無法自動判斷時，會跳出視窗請你確認要更新哪一筆。</span>
+                    <br><span class="text-xs text-red-600">* 注意：檔案視為完整名單，未出現在檔案中的會友將被移除（移除前會於確認視窗警示已綁定者）。</span>
                 `;
             } else if (type === 'categories') {
                 instructionEl.innerHTML = `
@@ -469,6 +487,12 @@
             const type = document.getElementById('upload-type').value;
             if (!file) return;
 
+            if (type === 'members') {
+                // Two-phase flow: analyze first, confirm in a modal, then commit.
+                await analyzeMemberUpload(file);
+                return;
+            }
+
             const confirmMsg = type === 'devotions'
                 ? '確定要上傳奉獻明細嗎？'
                 : '警告：此操作將全數取代現有資料。確定要繼續嗎？';
@@ -479,7 +503,6 @@
             formData.append('file', file);
 
             let endpoint = '/api/admin/upload/devotions';
-            if (type === 'members') endpoint = '/api/admin/upload/members';
             if (type === 'categories') endpoint = '/api/admin/upload/categories';
 
             try {
@@ -491,14 +514,147 @@
                 const data = await res.json();
                 if (res.ok) {
                     alert(`上傳成功: ${data.processed} 筆`);
-                    // Reset
-                    fileInput.value = '';
-                    document.getElementById('file-info').classList.add('hidden');
+                    resetUploadInput();
                 } else {
                     alert(`上傳失敗: ${data.detail || data.message || '未知錯誤'}`);
                 }
             } catch (e) {
                 logger.error("uploadFile error", e);
+                alert("上傳錯誤");
+            }
+        }
+
+        function resetUploadInput() {
+            fileInput.value = '';
+            document.getElementById('file-info').classList.add('hidden');
+        }
+
+        // --- Member upload: analyze -> confirm modal -> commit ---
+        let pendingMemberUpload = null; // { file, conflicts }
+
+        async function analyzeMemberUpload(file) {
+            const formData = new FormData();
+            formData.append('file', file);
+            try {
+                const res = await fetch('/api/admin/upload/members/analyze', {
+                    method: 'POST',
+                    credentials: 'include',
+                    body: formData
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                    alert(`名單分析失敗: ${data.detail || data.message || '未知錯誤'}`);
+                    return;
+                }
+                pendingMemberUpload = { file, conflicts: data.conflicts || [] };
+                renderMemberUploadModal(data);
+            } catch (e) {
+                logger.error("analyzeMemberUpload error", e);
+                alert("名單分析錯誤");
+            }
+        }
+
+        function renderMemberUploadModal(data) {
+            const renumbered = (data.updates || []).filter(u => u.old_id !== u.new_id);
+            const boundDeletes = data.bound_deletes || [];
+            const summaryEl = document.getElementById('mu-summary');
+
+            let html = `
+                <p>更新編號：<strong>${renumbered.length}</strong> 筆（編號不變 ${(data.updates || []).length - renumbered.length} 筆）、
+                   新增：<strong>${(data.creates || []).length}</strong> 筆、
+                   移除：<strong>${(data.deletes || []).length}</strong> 筆</p>
+            `;
+            if (renumbered.length > 0) {
+                html += `<div class="bg-blue-50 rounded p-2 max-h-32 overflow-y-auto text-xs">` +
+                    renumbered.map(u =>
+                        `${u.masked_name}：${u.old_id} → ${u.new_id}${u.is_bind ? '（已綁定，將一併轉移）' : ''}`
+                    ).join('<br>') + `</div>`;
+            }
+            if (boundDeletes.length > 0) {
+                html += `<div class="bg-red-50 text-red-700 rounded p-2 text-xs">
+                    <strong>警告：以下已綁定會友不在檔案中，將被移除：</strong><br>` +
+                    boundDeletes.map(d => `${d.masked_name}（${d.member_id}）`).join('、') + `</div>`;
+            }
+            summaryEl.innerHTML = html;
+
+            const conflictsEl = document.getElementById('mu-conflicts');
+            const conflicts = pendingMemberUpload.conflicts;
+            if (conflicts.length === 0) {
+                conflictsEl.innerHTML = '';
+            } else {
+                conflictsEl.innerHTML = `
+                    <p class="text-sm font-medium text-amber-700">以下 ${conflicts.length} 筆姓名無法自動判斷，請選擇要更新哪一位既有會友：</p>
+                ` + conflicts.map((cf, i) => `
+                    <div class="border border-amber-300 bg-amber-50 rounded p-3 text-sm">
+                        <p class="font-medium mb-2">${cf.masked_name}（檔案中新編號：${cf.new_id}）</p>
+                        <div class="space-y-1">
+                            ${cf.candidates.map(c => `
+                                <label class="flex items-center space-x-2">
+                                    <input type="radio" name="mu-conflict-${i}" value="${c.member_id}">
+                                    <span>更新既有會友 ${c.masked_name}（編號 ${c.member_id}${c.is_bind ? '，已綁定' : ''}）</span>
+                                </label>
+                            `).join('')}
+                            <label class="flex items-center space-x-2">
+                                <input type="radio" name="mu-conflict-${i}" value="__create__">
+                                <span>視為新會友（不更新任何既有會友）</span>
+                            </label>
+                        </div>
+                    </div>
+                `).join('');
+            }
+
+            document.getElementById('member-upload-modal').classList.remove('hidden');
+        }
+
+        function closeMemberUploadModal() {
+            document.getElementById('member-upload-modal').classList.add('hidden');
+            pendingMemberUpload = null;
+        }
+
+        async function confirmMemberUpload() {
+            if (!pendingMemberUpload) return;
+            const { file, conflicts } = pendingMemberUpload;
+
+            const resolutions = {};
+            for (let i = 0; i < conflicts.length; i++) {
+                const chosen = document.querySelector(`input[name="mu-conflict-${i}"]:checked`);
+                if (!chosen) {
+                    alert(`請先為「${conflicts[i].masked_name}」選擇要更新的對象。`);
+                    return;
+                }
+                resolutions[conflicts[i].new_id] = chosen.value === '__create__'
+                    ? { action: 'create' }
+                    : { action: 'match', old_id: chosen.value };
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('resolutions', JSON.stringify(resolutions));
+
+            try {
+                const res = await fetch('/api/admin/upload/members', {
+                    method: 'POST',
+                    credentials: 'include',
+                    body: formData
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    closeMemberUploadModal();
+                    alert(`上傳成功：更新 ${data.updated} 筆（其中改編號 ${data.renumbered} 筆）、新增 ${data.created} 筆、移除 ${data.deleted} 筆。\n` +
+                          `已轉移綁定帳號 ${data.migrated_users} 筆、奉獻紀錄 ${data.migrated_devotions} 筆。`);
+                    resetUploadInput();
+                    loadUsers();
+                } else if (res.status === 409 && data.detail && data.detail.conflicts) {
+                    // DB changed between analyze and commit — re-render with fresh conflicts
+                    pendingMemberUpload.conflicts = data.detail.conflicts;
+                    alert('名單狀態已變更，請重新確認同名項目。');
+                    renderMemberUploadModal({ updates: [], creates: [], deletes: [], bound_deletes: [] });
+                } else {
+                    const detail = typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail);
+                    alert(`上傳失敗: ${detail || data.message || '未知錯誤'}`);
+                }
+            } catch (e) {
+                logger.error("confirmMemberUpload error", e);
                 alert("上傳錯誤");
             }
         }
